@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="/static/css/login.css">
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+
+    <title>Login Page</title>
+    <style>
+        body {
+            
+            font-family: Arial, sans-serif;
+            
+            justify-content: center;
+            align-items: center;
+            height: 90vh;
+            background-color: white;
+        }
+        a{
+          text-decoration: none;
+          color: greenyellow;
+        }
+
+        .logo{
+        position:static;
+        height: auto;
+        width: 130px;
+        left: 0px;
+        cursor: pointer;
+        padding-right: 5px;
+
+
+       }
+
+        .login-container {
+            background-color: transparent;
+            padding: 30px;
+            border-radius: 5px;
+            
+            justify-content: center;
+            padding-left: 100px;
+            margin-left: 100px;
+            padding-right: 100px;
+            margin-right: 100px;
+        }
+        .login-container h2 {
+            margin-bottom: 20px;
+        }
+        .login-container input {
+            display: block;
+            width: 60%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .login-btn {
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007BFF;
+            color: white;
+            font-size: 16px;
+        }
+        .login-btn:hover {
+            background-color: #0056b3;
+            color: white;
+        }
+
+     
+        .forgot-password {
+                        padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007BFF;
+            color: white;
+            font-size: 16px;
+            margin-top: 10px;
+
+
+        }
+
+    .register-btn{
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007BFF;
+            color: white;
+            font-size: 16px;
+        }
+
+        .form-content{
+          margin-left: 20%;
+          margin-right: 20%;
+          background: whitesmoke;
+          box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+          
+        }
+        .form{
+          margin-top: 10px;
+          padding-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    
+    <center><img src="" class="logo"></center>
+    
+    <center><div class="login-container">
+      <h2 style="color: #e2dddd;">LOGIN</h2>
+
+        {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <ul>
+          {% for message in messages %}
+            <li type="none" style="color: red;">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+    <div class="form-content">
+
+    <form action="/api/auth/login" method="POST" class="form">
+       <label for="username_or_email"> Username/Email</label> <br>
+        
+  <input type="text" name="username_or_email" placeholder="Username or Email" required><br>
+  <label for="password">Password</label> <br>
+  <input type="password" name="password" placeholder="Password" required><br>
+  <button type="submit" class="login-btn">Login</button> <br>
+
+
+        
+    </form>
+
+    <a href="/reset_password">
+       <br>Forgot Password? 
+    </a> <br>
+
+       <a href="api/auth/register">
+        Not a member? Register here
+       </a> <br>
+    </div></center>
+
+  
+
+
+
+
+
+
+
+</body>
+
+
+</html>

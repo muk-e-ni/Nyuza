@@ -1,0 +1,15 @@
+mysql-connector-python
+python-dotenv
+pandas
+numpy
+joblib
+Flask
+Flask-JWT-Extended
+Flask-SQLAlchemy
+Flask-CORS
+requests
+Werkzeug
+python-dotenv
+numpy
+scikit-learn
+torch

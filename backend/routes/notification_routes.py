@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
 from services.notification_service import notification_service
 from models import NotificationLog, User
@@ -6,8 +7,11 @@ from datetime import datetime, timedelta
 import jwt
 import os
 
+
+load_dotenv()  # Load environment variables from .env file
+
 notification_bp = Blueprint('notifications', __name__)
-JWT_SECRET_KEY = os.getenv('SECRET_KEY', '123BRANDON')
+JWT_SECRET_KEY = os.getenv('SECRET_KEY', '')
 
 def token_required(f):
     """JWT token verification decorator"""

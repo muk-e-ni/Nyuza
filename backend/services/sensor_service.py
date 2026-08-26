@@ -6,6 +6,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Background monitoring stores data against this account by default, since
+# there's one physical Arduino for the demo farm. Matches the same default
+# used in vision_monitoring_service.py — revisit for real multi-farm support.
+DEFAULT_MONITORING_USER_ID = 1
+
 # Import serial
 import serial
 from serial import SerialException
@@ -129,6 +134,35 @@ class SensorDataService:
                 
         except Exception as e:
             logger.error(f"Error starting irrigation: {e}")
+            return False
+
+    def trigger_dosing_pump(self, duration_ms=1500):
+        """Trigger the pesticide/fertilizer dosing pump via Arduino.
+        Called by VisionMonitoringService when a disease is detected with
+        high confidence. Reuses this service's existing Arduino connection —
+        there's only one serial port, so the vision service doesn't open
+        its own connection, it calls this method instead."""
+        try:
+            if not self.arduino or not self.arduino.is_open:
+                if not self.connect_arduino():
+                    return False
+
+            with self._lock:
+                command = f"DOSE:{duration_ms}\n"
+                self.arduino.write(command.encode())
+                logger.info(f"Dosing pump triggered for {duration_ms}ms")
+
+                time.sleep(1)
+                response = self.arduino.readline().decode('utf-8').strip()
+                logger.info(f"Arduino response: {response}")
+
+                if "DOSE_FAILED" in response:
+                    return False
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error triggering dosing pump: {e}")
             return False
 
     def stop_irrigation(self):
@@ -450,10 +484,18 @@ class SensorDataService:
         def monitoring_loop():
             while self.is_monitoring:
                 try:
-                    # This would need to be called from a route with user context
-                    # For now, we'll log that monitoring is active
-                    logger.info("Auto monitoring active - use API endpoints to store data")
-                    
+                    # store_sensor_data() reads from Arduino, saves the
+                    # reading, and internally calls check_auto_irrigation()
+                    # — this direct method call needs no HTTP request and
+                    # no auth token, unlike the /api/sensors/store-readings
+                    # route. store_sensor_data() already wraps itself in
+                    # self.app.app_context() when self.app is set.
+                    success = self.store_sensor_data(user_id=DEFAULT_MONITORING_USER_ID)
+                    if success:
+                        logger.info("Auto monitoring: sensor data stored, auto-irrigation checked")
+                    else:
+                        logger.warning("Auto monitoring: failed to store sensor data this cycle")
+
                     # Wait 10 minutes
                     for _ in range(600):
                         if not self.is_monitoring:

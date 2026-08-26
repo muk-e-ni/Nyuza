@@ -7,11 +7,13 @@ from models import User, AdminLog, Sensors, IrrigationZone, SystemSettings
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 import jwt, os, time
+from dotenv import load_dotenv
 
+load_dotenv()
 
 auth_bp = Blueprint('auth', __name__)
 
-JWT_SECRET_KEY = os.getenv('SECRET_KEY', '123BRANDON')
+JWT_SECRET_KEY = os.getenv('SECRET_KEY', '')
 JWT_ALGORITHM = 'HS256'
 
 def token_required(f):
@@ -182,7 +184,7 @@ def login():
                 'message': 'Invalid email/username or password'
             }), 401
         
-        secret_key = os.getenv('SECRET_KEY', '123BRANDON')
+        secret_key = os.getenv('SECRET_KEY', '')
         expiration_time = int(time.time()) + (24 * 60 * 60)
         
         print("🔍 [LOGIN DEBUG] Creating JWT token...")   

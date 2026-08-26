@@ -3,8 +3,11 @@ from models import UserPreferences, database
 import jwt
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
 preferences_bp = Blueprint('preferences', __name__)
-JWT_SECRET_KEY = os.getenv('SECRET_KEY', '123BRANDON')
+JWT_SECRET_KEY = os.getenv('SECRET_KEY', '')
 
 def token_required(f):
     """JWT token verification decorator"""

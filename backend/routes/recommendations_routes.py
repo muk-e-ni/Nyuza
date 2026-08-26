@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
 from models import Recommendation, RecommendationAction
 from config import database
@@ -12,7 +13,8 @@ from datetime import datetime, timedelta
 
 recommendation_bp = Blueprint('recommendations', __name__)
 
-JWT_SECRET_KEY = os.getenv('SECRET_KEY', '123BRANDON')
+load_dotenv()
+JWT_SECRET_KEY = os.getenv('SECRET_KEY', '')
 JWT_ALGORITHM = 'HS256'
 
 def token_required(f):

@@ -11,5 +11,10 @@ requests
 Werkzeug
 python-dotenv
 numpy
+pymysql
 scikit-learn
 torch
+torchvision
+Pillow
+pyserial
+twilio

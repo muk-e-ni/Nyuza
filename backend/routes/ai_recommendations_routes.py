@@ -6,10 +6,13 @@ from services.ai_recommendation_engine import ai_recommendation_engine
 from services.ollama_service import ollama_service
 from services.weather_service import weather_service
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 ai_bp = Blueprint('ai', __name__)
 
-JWT_SECRET_KEY = os.getenv('SECRET_KEY', '123BRANDON')
+JWT_SECRET_KEY = os.getenv('SECRET_KEY', '')
 JWT_ALGORITHM = 'HS256'
 
 def token_required(f):

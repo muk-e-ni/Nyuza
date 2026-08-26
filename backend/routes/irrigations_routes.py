@@ -4,13 +4,15 @@ from config import database
 from datetime import datetime, timedelta
 import jwt
 import os 
+from dotenv import load_dotenv
 from functools import wraps
 from services.sensor_service import sensor_service
 import irrigation_controller
 from services.notification_service import notification_service
 
+load_dotenv()
 
-JWT_SECRET_KEY = os.getenv('SECRET_KEY', '123BRANDON')
+JWT_SECRET_KEY = os.getenv('SECRET_KEY', '')
 JWT_ALGORITHM = 'HS256'
 
 def token_required(f):

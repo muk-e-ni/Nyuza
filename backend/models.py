@@ -215,6 +215,24 @@ class MoistureReading(database.Model):
         database.Index('idx_moisture_zone_time', 'zone_id', 'timestamp'),
     )
 
+class PlantHealthReading(database.Model):
+    __tablename__ = 'plant_health_readings'
+
+    reading_id = database.Column(database.Integer, primary_key=True)
+    user_id = database.Column(database.Integer, database.ForeignKey('users.user_id'), nullable=False)
+    zone_id = database.Column(database.Integer, database.ForeignKey('irrigation_zones.zone_id'), nullable=True)
+    predicted_class = database.Column(database.String(50), nullable=False)  # e.g. common_rust, healthy
+    confidence = database.Column(database.Float, nullable=False)  # 0.0 - 1.0
+    is_healthy = database.Column(database.Boolean, nullable=False, default=False)
+    image_path = database.Column(database.String(255))  # relative path to the saved image, if kept
+    model_version = database.Column(database.String(50))  # e.g. 'disease_v1'
+    timestamp = database.Column(database.DateTime, default=datetime.now)
+
+    # Index for performance
+    __table_args__ = (
+        database.Index('idx_planthealth_zone_time', 'zone_id', 'timestamp'),
+    )
+
 class IrrigationRule(database.Model):
     __tablename__ = 'irrigation_rules'
 

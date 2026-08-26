@@ -3,10 +3,12 @@ import json
 import os
 from datetime import datetime
 import numpy as np
+from dotenv import load_dotenv
 
+load_dotenv()
 class OllamaService:
     def __init__(self):
-        self.base_url = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
+        self.base_url = os.getenv('OLLAMA_BASE_URL', '')
         self.model = None
         self.timeout =30
         self.is_available = self.check_availability()

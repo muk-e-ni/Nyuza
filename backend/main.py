@@ -20,6 +20,7 @@ import traceback
 import atexit
 from routes.notification_routes import notification_bp
 from routes.preferences_routes import preferences_bp
+from routes.vision_routes import vision_bp
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,6 +53,8 @@ app.register_blueprint(weather_bp, url_prefix='/weather')
 app.register_blueprint(ai_bp, url_prefix = '/ai')
 app.register_blueprint(notification_bp, url_prefix='/notifications')
 app.register_blueprint(preferences_bp, url_prefix='/profile')
+app.register_blueprint(vision_bp, url_prefix='/vision')
+
 
 # Track if services are running
 services_started = False

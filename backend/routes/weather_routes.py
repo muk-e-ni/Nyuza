@@ -10,11 +10,12 @@ import jwt
 import os 
 from flask import Blueprint, jsonify, request
 from functools import wraps
+from dotenv import load_dotenv
 
 
 weather_bp = Blueprint('weather', __name__)
-
-JWT_SECRET_KEY = os.getenv('SECRET_KEY', '123BRANDON')
+load_dotenv()
+JWT_SECRET_KEY = os.getenv('SECRET_KEY', '')
 JWT_ALGORITHM = 'HS256'
 
 def jwt_required(f):

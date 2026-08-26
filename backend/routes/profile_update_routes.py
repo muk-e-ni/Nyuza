@@ -6,10 +6,12 @@ import jwt
 import os 
 from functools import wraps
 import re 
+from dotenv import load_dotenv
 
 profile_bp = Blueprint('profile', __name__)
 
-JWT_SECRET_KEY = os.getenv('SECRET_KEY', '123BRANDON')
+load_dotenv()
+JWT_SECRET_KEY = os.getenv('SECRET_KEY', '')
 JWT_ALGORITHM = 'HS256'
 
 def token_required(f):

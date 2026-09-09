@@ -2,6 +2,11 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { authAPI, userAPI } from '../../services/api';
 import jsPDF from 'jspdf';
+import {
+  DataObject as DataObjectIcon,
+  PictureAsPdf as PictureAsPdfIcon,
+  WarningAmber as WarningAmberIcon,
+} from '@mui/icons-material';
 
 const ProfileSettings = ({ currentUser }) => {
   const { logout, updateUser } = useAuth();
@@ -202,12 +207,12 @@ const exportToPDF = (exportData) => {
     const doc = new jsPDF();
     
     // Add header with logo/icon
-    doc.setFillColor(42, 157, 143);
+    doc.setFillColor(46, 125, 50);
     doc.rect(0, 0, 210, 30, 'F');
     
     doc.setFontSize(16);
     doc.setTextColor(255, 255, 255);
-    doc.text('💧 Nyuza Smart Irrigation System', 20, 20);
+    doc.text('Nyuza Smart Irrigation System', 20, 20);
     
     doc.setFontSize(10);
     doc.text('Data Export Report', 20, 28);
@@ -544,13 +549,13 @@ if (exportData.preferences && Object.keys(exportData.preferences).length > 0) {
           className="export-btn"
           onClick={() => handleExportData('json')}
         >
-          📊 Export as JSON
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><DataObjectIcon sx={{ fontSize: 16 }} /> Export as JSON</span>
         </button>
         <button 
           className="export-btn"
           onClick={() => handleExportData('pdf')}
         >
-          📄 Export as PDF
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><PictureAsPdfIcon sx={{ fontSize: 16 }} /> Export as PDF</span>
         </button>
 
       </div>
@@ -573,7 +578,7 @@ if (exportData.preferences && Object.keys(exportData.preferences).length > 0) {
       {showDeleteConfirm && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h3>⚠️ Delete Account</h3>
+            <h3 style={{ display: "flex", alignItems: "center", gap: 6 }}><WarningAmberIcon sx={{ fontSize: 20, color: "#c04e37" }} /> Delete Account</h3>
             <p>This action <strong>cannot be undone</strong>. This will permanently:</p>
             <ul>
               <li>Delete your account and all personal information</li>

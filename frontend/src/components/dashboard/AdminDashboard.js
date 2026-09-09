@@ -2,6 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import './AdminDashboard.css';
+import {
+  Lock as LockIcon,
+  BarChart as BarChartIcon,
+  Group as GroupIcon,
+  Build as BuildIcon,
+  Settings as SettingsIcon,
+  ListAlt as ListAltIcon,
+} from '@mui/icons-material';
 
 const AdminDashboard = () => {
   const [dashboardData, setDashboardData] = useState({});
@@ -27,7 +35,7 @@ const AdminDashboard = () => {
     return (
       <div className="admin-dashboard">
         <div className="access-denied">
-          <h2>🔒 Access Denied</h2>
+          <h2 style={{ display: "flex", alignItems: "center", gap: 8, justifyContent: "center" }}><LockIcon sx={{ fontSize: 24 }} /> Access Denied</h2>
           <p>You need administrator privileges to access this page.</p>
         </div>
       </div>
@@ -46,31 +54,31 @@ const AdminDashboard = () => {
           className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
           onClick={() => setActiveTab('overview')}
         >
-          📊 Overview
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><BarChartIcon sx={{ fontSize: 16 }} /> Overview</span>
         </button>
         <button 
           className={`tab ${activeTab === 'users' ? 'active' : ''}`}
           onClick={() => setActiveTab('users')}
         >
-          👥 User Management
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><GroupIcon sx={{ fontSize: 16 }} /> User Management</span>
         </button>
         <button 
           className={`tab ${activeTab === 'sensors' ? 'active' : ''}`}
           onClick={() => setActiveTab('sensors')}
         >
-          🔧 Sensor Management
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><BuildIcon sx={{ fontSize: 16 }} /> Sensor Management</span>
         </button>
         <button 
           className={`tab ${activeTab === 'system' ? 'active' : ''}`}
           onClick={() => setActiveTab('system')}
         >
-          ⚙️ System Settings
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><SettingsIcon sx={{ fontSize: 16 }} /> System Settings</span>
         </button>
         <button 
           className={`tab ${activeTab === 'logs' ? 'active' : ''}`}
           onClick={() => setActiveTab('logs')}
         >
-          📋 Activity Logs
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><ListAltIcon sx={{ fontSize: 16 }} /> Activity Logs</span>
         </button>
       </div>
 

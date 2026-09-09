@@ -20,7 +20,10 @@ import {
   WaterDrop as WaterIcon,
   Psychology as PsychologyIcon,
   Warning as WarningIcon,
-  CheckCircle as CheckIcon
+  CheckCircle as CheckIcon,
+  SmartToy as SmartToyIcon,
+  BarChart as BarChartIcon,
+  Spa as SpaIcon
 } from '@mui/icons-material';
 
 const AIRecommendationPanel = ({ zoneId, zoneName }) => {
@@ -377,15 +380,15 @@ Continue monitoring and water when moisture drops below 40%`;
         });
         
         if (response.data.success) {
-          alert(`✅ Irrigation started for ${zoneName} with ${waterAmount}L of water`);
+          alert(`Irrigation started for ${zoneName} with ${waterAmount}L of water`);
           // Refresh recommendations to show updated status
           setTimeout(() => fetchRecommendations(), 2000);
         } else {
-          alert('❌ Failed to start irrigation. Please check system status.');
+          alert('Failed to start irrigation. Please check system status.');
         }
       } catch (err) {
         console.error('Error starting irrigation:', err);
-        alert('❌ Error starting irrigation. Please try again.');
+        alert('Error starting irrigation. Please try again.');
       }
     }
   };
@@ -394,9 +397,12 @@ Continue monitoring and water when moisture drops below 40%`;
     return (
       <Box display="flex" justifyContent="center" alignItems="center" p={3}>
         <CircularProgress size={24} sx={{ mr: 2 }} />
-        <Typography variant="body1">
-          {usingFallback ? '📊 Analyzing system data...' : '🤖 AI is analyzing your irrigation needs...'}
-        </Typography>
+        <Box display="flex" alignItems="center" gap={1}>
+          {usingFallback ? <BarChartIcon sx={{ fontSize: 20 }} /> : <SmartToyIcon sx={{ fontSize: 20 }} />}
+          <Typography variant="body1">
+            {usingFallback ? 'Analyzing system data...' : 'AI is analyzing your irrigation needs...'}
+          </Typography>
+        </Box>
       </Box>
     );
   }
@@ -509,7 +515,7 @@ Continue monitoring and water when moisture drops below 40%`;
                   sx={{ mr: 1 }}
                 />
                 <Typography variant="h6" component="h3">
-                  {predictions?.irrigation_needed ? '🚨 Irrigation Recommended' : '✅ No Irrigation Needed'}
+                  {predictions?.irrigation_needed ? 'Irrigation Recommended' : 'No Irrigation Needed'}
                 </Typography>
               </Box>
               
@@ -577,7 +583,7 @@ Continue monitoring and water when moisture drops below 40%`;
                   <Card variant="outlined">
                     <CardContent>
                       <Typography variant="h6" component="h3" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        👨‍🌾 For Your Experience Level
+                        <PsychologyIcon sx={{ fontSize: 20 }} /> For Your Experience Level
                       </Typography>
                       <Box component="ul" sx={{ pl: 2, m: 0 }}>
                         {personalized_advice.experience_level.map((advice, index) => (
@@ -597,7 +603,7 @@ Continue monitoring and water when moisture drops below 40%`;
                   <Card variant="outlined">
                     <CardContent>
                       <Typography variant="h6" component="h3" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        💧 Water Efficiency
+                        <WaterIcon sx={{ fontSize: 20 }} /> Water Efficiency
                       </Typography>
                       <Box component="ul" sx={{ pl: 2, m: 0 }}>
                         {personalized_advice.water_efficiency.map((tip, index) => (
@@ -617,7 +623,7 @@ Continue monitoring and water when moisture drops below 40%`;
                   <Card variant="outlined">
                     <CardContent>
                       <Typography variant="h6" component="h3" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        🌿 Zone-Specific Advice
+                        <SpaIcon sx={{ fontSize: 20 }} /> Zone-Specific Advice
                       </Typography>
                       <Box component="ul" sx={{ pl: 2, m: 0 }}>
                         {personalized_advice.zone_specific.map((advice, index) => (
@@ -682,7 +688,7 @@ Continue monitoring and water when moisture drops below 40%`;
             </CardContent>
             <Chip 
   icon={ollama_available ? <CheckIcon /> : <WarningIcon />}
-  label={ollama_available ? "🤖 AI Active" : "🔧 Basic Mode"} 
+  label={ollama_available ? "AI Active" : "Basic Mode"} 
   color={ollama_available ? "success" : "warning"}
   variant="outlined"
 />

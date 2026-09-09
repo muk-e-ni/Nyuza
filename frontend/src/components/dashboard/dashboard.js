@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useMediaQuery } from '@mui/material';
 import { useAuth } from '../../context/AuthContext';
 import HomeSection from './HomeSection';
 import StatusSection from './StatusSection';
@@ -6,13 +7,33 @@ import IrrigationSection from './IrrigationSection';
 import ReportsSection from './ReportsSection';
 import SystemSettings from './SystemSettings';
 import ProfileSettings from './ProfileSettings';
-import './dashboard.css';
+import MobileBottomNav from './MobileBottomNav';
+import {
+  Home as HomeIcon,
+  Insights as InsightsIcon,
+  CameraAlt as CameraIcon,
+  WaterDrop as WaterDropIcon,
+  BarChart as ReportsIcon,
+  Settings as SettingsIcon,
+  Person as ProfileIcon,
+  Logout as LogoutIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Info as InfoIcon,
+  Notifications as NotificationsIcon,
+  SmartToy as SmartToyIcon,
+  Spa as SpaIcon,
+  Phone as PhoneIcon,
+  Email as EmailIcon,
+} from '@mui/icons-material';
+import './Dashboard.css';
 import './irrigation.css';
 import './reports.css';
 import './home.css';
 
 import WeatherPanel from '../weather/WeatherPanel';
 import AIRecommendationPanel from '../ai/AIRecommendationPanel';
+import VisionMonitoringPanel from '../vision/VisionMonitoringPanel';
 import { zoneAPI, aiAPI } from '../../services/api';
 import {
   Grid,
@@ -44,7 +65,7 @@ const Notification = ({ message, type, onClose }) => {
     <div className={`notification notification-${type}`}>
       <div className="notification-content">
         <span className="notification-icon">
-          {type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}
+          {type === 'success' ? <CheckCircleIcon sx={{ fontSize: 18, color: '#2e7d32' }} /> : type === 'error' ? <CancelIcon sx={{ fontSize: 18, color: '#c04e37' }} /> : <InfoIcon sx={{ fontSize: 18, color: '#3c4e43' }} />}
         </span>
         <span className="notification-message">{message}</span>
       </div>
@@ -103,7 +124,7 @@ const NotificationCenter = ({ notifications, onClearAll, onRemoveNotification, o
           className="notification-center-toggle"
           onClick={() => setIsOpen(!isOpen)}
         >
-          🔔
+          <NotificationsIcon sx={{ fontSize: 22, color: '#1e2722' }} />
         </button>
       </Badge>
 
@@ -143,7 +164,7 @@ const NotificationCenter = ({ notifications, onClearAll, onRemoveNotification, o
           <div className="notification-list">
             {notifications.length === 0 ? (
               <div className="no-notifications">
-                <div className="no-notifications-icon">🔔</div>
+                <div className="no-notifications-icon"><NotificationsIcon sx={{ fontSize: 32, color: '#8e9e94' }} /></div>
                 <p>No notifications yet</p>
                 <small>System notifications will appear here</small>
               </div>
@@ -156,8 +177,8 @@ const NotificationCenter = ({ notifications, onClearAll, onRemoveNotification, o
                 >
                   <div className="notification-item-content">
                     <span className="notification-icon">
-                      {notification.type === 'success' ? '✅' : 
-                       notification.type === 'error' ? '❌' : 'ℹ️'}
+                      {notification.type === 'success' ? <CheckCircleIcon sx={{ fontSize: 18, color: '#2e7d32' }} /> : 
+                       notification.type === 'error' ? <CancelIcon sx={{ fontSize: 18, color: '#c04e37' }} /> : <InfoIcon sx={{ fontSize: 18, color: '#3c4e43' }} />}
                     </span>
                     <div className="notification-text">
                       <p className="notification-message">
@@ -192,6 +213,7 @@ const NotificationCenter = ({ notifications, onClearAll, onRemoveNotification, o
 };
 const Dashboard = () => {
   const [activeSection, setActiveSection] = useState('home');
+  const isMobile = useMediaQuery('(max-width:768px)');
   const [zones, setZones] = useState([]);
   const [currentZoneId, setCurrentZoneId] = useState(null);
   const [loadingZones, setLoadingZones] = useState(true);
@@ -346,12 +368,13 @@ const Dashboard = () => {
                     <Typography variant="h5" gutterBottom sx={{ 
                       display: 'flex', 
                       alignItems: 'center',
+                      gap: 1,
                       color: 'primary.main',
                       borderBottom: '2px solid',
                       borderColor: 'primary.main',
                       pb: 1
                     }}>
-                      🤖 AI Irrigation Advisor
+                      <SmartToyIcon sx={{ fontSize: 22 }} /> AI Irrigation Advisor
                     </Typography>
                     
                     {loadingZones ? (
@@ -415,6 +438,14 @@ const Dashboard = () => {
                   <WeatherPanel onNotification={addNotification} />
                 </Grid>
               </Grid>
+
+              {/* Vision Monitoring preview — full width, not zone-scoped.
+                  A dedicated, focused page also exists at the 'vision'
+                  section (sidebar + mobile quick-action tiles) for when
+                  more room/history is needed than this home preview shows. */}
+              <Box sx={{ mt: 3 }}>
+                <VisionMonitoringPanel />
+              </Box>
             </Box>
           );
       case 'status':
@@ -423,6 +454,12 @@ const Dashboard = () => {
           currentZoneId={currentZoneId} 
           {...sectionProps}
         />;
+      case 'vision':
+        return (
+          <Box sx={{ px: { xs: 2, md: 0 }, py: { xs: 1.5, md: 0 } }}>
+            <VisionMonitoringPanel />
+          </Box>
+        );
       case 'irrigation':
         return <IrrigationSection 
           zones={zones} 
@@ -476,12 +513,12 @@ const Dashboard = () => {
       {/* Sidebar */}
       <div className="sidebar">
         <div className="sidebar-header">
-          <Typography variant="h6" component="h2" sx={{ fontWeight: 'bold', color: 'black' }}>
-            🌱 Smart Irrigation
+          <Typography variant="h6" component="h2" sx={{ fontWeight: 'bold', color: '#faf6f0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+            <SpaIcon sx={{ fontSize: 22 }} /> Smart Irrigation
           </Typography>
           {currentZone && (
-            <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(255,255,255,0.1)', borderRadius: 1 }}>
-              <Typography variant="caption" sx={{ color: 'black', fontWeight: 'bold' }}>
+            <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(250,246,240,0.1)', borderRadius: 1 }}>
+              <Typography variant="caption" sx={{ color: '#faf6f0', fontWeight: 'bold' }}>
                 Currently Irrigated Zone: {currentZone.zone_name || currentZone.name}
               </Typography>
             </Box>
@@ -499,7 +536,7 @@ const Dashboard = () => {
               textTransform: 'none',
               fontSize: '16px'
             }}
-            startIcon={<span>🏠</span>}
+            startIcon={<HomeIcon sx={{ fontSize: 20 }} />}
           >
             Home
           </Button>
@@ -514,9 +551,24 @@ const Dashboard = () => {
               textTransform: 'none',
               fontSize: '16px'
             }}
-            startIcon={<span>📊</span>}
+            startIcon={<InsightsIcon sx={{ fontSize: 20 }} />}
           >
             System Status
+          </Button>
+
+          <Button 
+            fullWidth
+            className={`nav-item ${activeSection === 'vision' ? 'active' : ''}`}
+            onClick={() => setActiveSection('vision')}
+            sx={{ 
+              justifyContent: 'flex-start', 
+              color: 'white',
+              textTransform: 'none',
+              fontSize: '16px'
+            }}
+            startIcon={<CameraIcon sx={{ fontSize: 20 }} />}
+          >
+            Vision Monitoring
           </Button>
           
           <Button 
@@ -529,7 +581,7 @@ const Dashboard = () => {
               textTransform: 'none',
               fontSize: '16px'
             }}
-            startIcon={<span>💧</span>}
+            startIcon={<WaterDropIcon sx={{ fontSize: 20 }} />}
           >
             Irrigation Control
           </Button>
@@ -544,7 +596,7 @@ const Dashboard = () => {
               textTransform: 'none',
               fontSize: '16px'
             }}
-            startIcon={<span>📈</span>}
+            startIcon={<ReportsIcon sx={{ fontSize: 20 }} />}
           >
             Reports & Analytics
           </Button>
@@ -559,7 +611,7 @@ const Dashboard = () => {
               textTransform: 'none',
               fontSize: '16px'
             }}
-            startIcon={<span>⚙️</span>}
+            startIcon={<SettingsIcon sx={{ fontSize: 20 }} />}
           >
             System Settings
           </Button>
@@ -574,7 +626,7 @@ const Dashboard = () => {
               textTransform: 'none',
               fontSize: '16px'
             }}
-            startIcon={<span>👤</span>}
+            startIcon={<ProfileIcon sx={{ fontSize: 20 }} />}
           >
             Profile Settings
           </Button>
@@ -590,7 +642,7 @@ const Dashboard = () => {
               fontSize: '16px',
               mt: 2
             }}
-            startIcon={<span>🚪</span>}
+            startIcon={<LogoutIcon sx={{ fontSize: 20 }} />}
           >
             Log Out
           </Button>
@@ -599,23 +651,34 @@ const Dashboard = () => {
         {/* Footer */}
         <div className="sidebar-footer">
           <div className="contact-info">
-            <Typography variant="caption" display="block" sx={{ color: 'black' }}>
-              📞 Tel. +254-758861709
+            <Typography variant="caption" display="block" sx={{ color: '#faf6f0', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <PhoneIcon sx={{ fontSize: 14 }} /> Tel. +254-758861709
             </Typography>
-            <Typography variant="caption" display="block" sx={{ color: 'black' }}>
-              📧 email: brandon.brad204@gmail.com
+            <Typography variant="caption" display="block" sx={{ color: '#faf6f0', display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+              <EmailIcon sx={{ fontSize: 14 }} /> email: brandon.brad204@gmail.com
             </Typography>
           </div>
           <div className="copyright">
-            <Typography variant="caption" display="block" sx={{ color: 'black', opacity: 0.8 }}>
+            <Typography variant="caption" display="block" sx={{ color: '#faf6f0', opacity: 0.7 }}>
               created by Brandon with bugs
             </Typography>
-            <Typography variant="caption" display="block" sx={{ color: 'black', opacity: 0.8 }}>
+            <Typography variant="caption" display="block" sx={{ color: '#faf6f0', opacity: 0.7 }}>
               © 2025 All Rights Reserved
             </Typography>
           </div>
         </div>
-      </div>
+      </div> 
+    
+
+     {/* Mobile bottom nav — separate component, only rendered on mobile.
+          Desktop sidebar above is untouched; CSS hides it below 768px. */}
+      {isMobile && (
+        <MobileBottomNav
+          activeSection={activeSection}
+          onSectionChange={setActiveSection}
+          onLogout={logout}
+        />
+      )} 
 
       {/* Main Content */}
       <div className="main-panel">

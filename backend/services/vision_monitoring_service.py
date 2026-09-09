@@ -1,20 +1,23 @@
 """
 Nyuza — vision monitoring service
 ------------------------------------
-The automated counterpart to services/sensor_service.py's monitoring_loop,
-but for the camera instead of Arduino sensors. Runs as a background thread
-that wakes up every CHECK_INTERVAL_SECONDS, grabs a frame from the phone
-camera, and reacts — no manual upload, no human in the loop.
+Background thread, same pattern as sensor_service.py's monitoring_loop, but
+for the camera. Every CHECK_INTERVAL_SECONDS it grabs one frame and runs
+BOTH the disease model and the pest model against it — no manual upload,
+no human in the loop.
 
-Decision policy :
-  - Healthy                                    -> log only
-  - Disease, confidence >= AUTO_DOSE_THRESHOLD  -> log + auto-trigger dosing
-  - Disease, confidence <  AUTO_DOSE_THRESHOLD  -> log + create a
-                                                    Recommendation + notify
-                                                    the farmer, no auto action
+Decision policy:
+  - Both negative (healthy AND no_pest)              -> log only
+  - Either model >= AUTO_DOSE_THRESHOLD               -> ONE dosing trigger
+    (not one per model — there's one physical pump, so if both models flag
+    a problem in the same cycle, we still only dose once, and the
+    recommendation records whichever issue(s) triggered it)
+  - Below threshold but not negative                  -> notify the farmer,
+    one Recommendation per flagged issue, no auto action
+  - Auto-dose eligible, but already dosed recently     -> log only, no
+    second dose (see DOSE_COOLDOWN_SECONDS)
 
-Camera source: a phone running the "IP Webcam" Android app (or DroidCam),
-streaming over wifi to CAMERA_SOURCE. No cable, no manual capture.
+Camera source: a phone running "IP Webcam" (Android), streaming over wifi.
 """
 
 import threading
@@ -25,6 +28,7 @@ from datetime import datetime, timedelta
 import cv2
 
 from services.disease_model_service import disease_model_service
+from services.pest_model_service import pest_model_service
 from services.sensor_service import sensor_service
 from utils.image_storage import save_plant_image
 from models import PlantHealthReading, Recommendation, NotificationLog
@@ -32,11 +36,11 @@ from config import database
 
 logger = logging.getLogger(__name__)
 
-CAMERA_SOURCE = "http://192.168.1.100:8080/video"  # <-- set to phone's IP Webcam URL
+CAMERA_SOURCE = "http://192.168.1.100:8080/video"  # <-- set to your phone's IP Webcam URL
 CHECK_INTERVAL_SECONDS = 180                        # every 3 minutes, for the demo
 AUTO_DOSE_THRESHOLD = 0.90                          # only auto-act when very confident
 DOSE_DURATION_MS = 1500
-DOSE_COOLDOWN_SECONDS = 6 * 3600                    # don't re-dose the same zone within 6 hours
+DOSE_COOLDOWN_SECONDS = 6 * 3600                    # don't re-dose within 6 hours
 
 
 class VisionMonitoringService:
@@ -67,7 +71,6 @@ class VisionMonitoringService:
                 except Exception as e:
                     logger.error(f"Vision monitoring error: {e}")
 
-                # Non-blocking-ish wait so stop_monitoring() takes effect quickly
                 for _ in range(CHECK_INTERVAL_SECONDS):
                     if not self.is_monitoring:
                         break
@@ -82,10 +85,6 @@ class VisionMonitoringService:
         logger.info("Vision monitoring stopped")
 
     def _capture_frame(self):
-        """Grab a single frame from the phone camera stream.
-        Opens and releases the connection each check rather than holding it
-        open continuously — simpler and more resilient to a phone briefly
-        dropping wifi between checks."""
         cap = cv2.VideoCapture(self.camera_source)
         if not cap.isOpened():
             logger.error(f"Could not open camera source: {self.camera_source}")
@@ -101,56 +100,81 @@ class VisionMonitoringService:
         return frame
 
     def _check_once(self, user_id=1, zone_id=None):
-        """One full check: capture -> classify -> act. user_id defaults to
-        the primary farm account for the demo; a multi-user deployment would
-        associate cameras with specific users/zones instead."""
-        if not disease_model_service.is_ready():
-            logger.warning("Disease model not loaded — skipping this check")
+        """One full check: capture -> run both models -> decide -> act.
+        Both models run against the exact same frame, so a single capture
+        serves both checks."""
+        disease_ready = disease_model_service.is_ready()
+        pest_ready = pest_model_service.is_ready()
+
+        if not disease_ready and not pest_ready:
+            logger.warning("Neither model is loaded — skipping this check")
             return
 
         frame = self._capture_frame()
         if frame is None:
             return
 
-        # Encode the frame the same way an uploaded file would arrive, so we
-        # reuse disease_model_service.predict()'s existing image-bytes interface.
         success, buffer = cv2.imencode(".jpg", frame)
         if not success:
             logger.error("Failed to encode captured frame")
             return
 
-        result = disease_model_service.predict(buffer.tobytes())
-        logger.info(
-            f"Vision check — {result['predicted_class']} "
-            f"({result['confidence']:.2%} confidence)"
-        )
+        image_bytes = buffer.tobytes()
+        # Both readings come from the same frame — save the image once and
+        # reuse the path for both DB rows, rather than saving it twice.
+        image_path = save_plant_image(image_bytes, user_id, "check")
 
-        image_path = save_plant_image(buffer.tobytes(), user_id, result["predicted_class"])
+        results = []
+        if disease_ready:
+            disease_result = disease_model_service.predict(image_bytes)
+            results.append(disease_result)
+            self._log_reading(user_id, zone_id, disease_result, image_path)
+            logger.info(
+                f"Disease check — {disease_result['predicted_class']} "
+                f"({disease_result['confidence']:.2%})"
+            )
 
+        if pest_ready:
+            pest_result = pest_model_service.predict(image_bytes)
+            results.append(pest_result)
+            self._log_reading(user_id, zone_id, pest_result, image_path)
+            logger.info(
+                f"Pest check — {pest_result['predicted_class']} "
+                f"({pest_result['confidence']:.2%})"
+            )
+
+        # Split this cycle's findings into "problem" results (something
+        # other than healthy/no_pest) vs everything else.
+        problems = [r for r in results if not r["is_negative"]]
+        if not problems:
+            return  # both models agree nothing's wrong — nothing further to do
+
+        auto_dose_candidates = [r for r in problems if r["confidence"] >= AUTO_DOSE_THRESHOLD]
+        review_candidates = [r for r in problems if r["confidence"] < AUTO_DOSE_THRESHOLD]
+
+        if auto_dose_candidates:
+            self._handle_auto_dose(user_id, auto_dose_candidates)
+
+        for result in review_candidates:
+            self._notify_farmer(user_id, result)
+
+    def _log_reading(self, user_id, zone_id, result, image_path):
         reading = PlantHealthReading(
             user_id=user_id,
             zone_id=zone_id,
             predicted_class=result["predicted_class"],
             confidence=result["confidence"],
-            is_healthy=result["is_healthy"],
+            is_healthy=result["is_negative"],
             image_path=image_path,
-            model_version="disease_v1",
+            model_version=result["model_version"],
         )
         database.session.add(reading)
         database.session.commit()
 
-        if result["is_healthy"]:
-            return  # nothing further to do
-
-        if result["confidence"] >= AUTO_DOSE_THRESHOLD:
-            self._auto_dose(user_id, result)
-        else:
-            self._notify_farmer(user_id, result)
-
     def _recently_dosed(self, user_id, within_seconds):
-        """Check whether we already auto-dosed recently, so we don't spray
-        again every single check cycle just because the same disease is
-        still visibly present (it won't disappear in 3 minutes)."""
+        """Have we auto-dosed recently, for ANY reason (disease or pest)?
+        There's one physical pump/chemical, so the cooldown is shared
+        across both models, not tracked separately."""
         cutoff = datetime.now() - timedelta(seconds=within_seconds)
         recent = Recommendation.query.filter(
             Recommendation.user_id == user_id,
@@ -160,29 +184,34 @@ class VisionMonitoringService:
         ).first()
         return recent is not None
 
-    def _auto_dose(self, user_id, result):
-        """High-confidence disease detection — act automatically, unless
-        we already dosed this recently (see DOSE_COOLDOWN_SECONDS)."""
+    def _describe(self, result):
+        label = result["predicted_class"].replace("_", " ")
+        return f"{label} ({result['confidence']:.0%} confidence, {result['model_version']})"
+
+    def _handle_auto_dose(self, user_id, candidates):
+        """One or more models flagged a high-confidence problem this cycle.
+        Fire the pump AT MOST ONCE, and describe every contributing issue
+        in a single recommendation — not one dose per model."""
+        issue_summary = ", ".join(self._describe(r) for r in candidates)
+
         if self._recently_dosed(user_id, DOSE_COOLDOWN_SECONDS):
             logger.info(
-                f"Skipping auto-dose for {result['predicted_class']} — "
-                f"already dosed within the last {DOSE_COOLDOWN_SECONDS // 3600}h, "
-                f"logging detection only"
+                f"Skipping auto-dose ({issue_summary}) — already dosed within "
+                f"the last {DOSE_COOLDOWN_SECONDS // 3600}h, logging only"
             )
             recommendation = Recommendation(
                 user_id=user_id,
-                title=f"Still detecting: {result['predicted_class'].replace('_', ' ').title()}",
+                title="Still detecting an issue",
                 description=(
-                    f"Still detecting {result['predicted_class'].replace('_', ' ')} at "
-                    f"{result['confidence']:.0%} confidence, but already treated recently — "
-                    f"logged for monitoring, no pump triggered this cycle."
+                    f"Still detecting: {issue_summary}. Already treated recently — "
+                    f"monitoring instead of re-dosing."
                 ),
                 recommendation_type="pest_control",
                 priority="low",
-                status="applied",  # already handled via the earlier dose; this is a monitoring log entry
+                status="applied",
                 applied_at=datetime.now(),
-                ai_model_version="disease_v1",
-                confidence_score=result["confidence"],
+                ai_model_version="+".join(sorted({r["model_version"] for r in candidates})),
+                confidence_score=max(r["confidence"] for r in candidates),
             )
             database.session.add(recommendation)
             database.session.commit()
@@ -192,24 +221,21 @@ class VisionMonitoringService:
 
         recommendation = Recommendation(
             user_id=user_id,
-            title=f"Auto-treated: {result['predicted_class'].replace('_', ' ').title()}",
-            description=(
-                f"Detected {result['predicted_class'].replace('_', ' ')} at "
-                f"{result['confidence']:.0%} confidence — dosing pump triggered automatically."
-            ),
+            title="Auto-treated: " + ", ".join(r["predicted_class"].replace("_", " ").title() for r in candidates),
+            description=f"Detected: {issue_summary} — dosing pump triggered automatically.",
             recommendation_type="pest_control",
             priority="high",
             status="applied",
             applied_at=datetime.now(),
-            ai_model_version="disease_v1",
-            confidence_score=result["confidence"],
+            ai_model_version="+".join(sorted({r["model_version"] for r in candidates})),
+            confidence_score=max(r["confidence"] for r in candidates),
         )
         database.session.add(recommendation)
         database.session.commit()
 
         logger.info(
             f"Auto-dose {'succeeded' if dose_success else 'FAILED (Arduino unreachable?)'} "
-            f"for {result['predicted_class']}"
+            f"for {issue_summary}"
         )
 
     def _notify_farmer(self, user_id, result):
@@ -219,13 +245,14 @@ class VisionMonitoringService:
             title=f"Possible {result['predicted_class'].replace('_', ' ').title()} detected",
             description=(
                 f"Camera detected possible {result['predicted_class'].replace('_', ' ')} "
-                f"at {result['confidence']:.0%} confidence — below the auto-treatment "
-                f"threshold. Please review and confirm before any pesticide is applied."
+                f"at {result['confidence']:.0%} confidence ({result['model_version']}) — "
+                f"below the auto-treatment threshold. Please review and confirm before "
+                f"any pesticide is applied."
             ),
             recommendation_type="alert",
             priority="medium",
             status="pending",
-            ai_model_version="disease_v1",
+            ai_model_version=result["model_version"],
             confidence_score=result["confidence"],
         )
         database.session.add(recommendation)

@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 # Background monitoring stores data against this account by default, since
 # there's one physical Arduino for the demo farm. Matches the same default
-# used in vision_monitoring_service.py — revisit for real multi-farm support.
+# used in vision_monitoring_service.py.
 DEFAULT_MONITORING_USER_ID = 1
 
 # Import serial
@@ -138,10 +138,10 @@ class SensorDataService:
 
     def trigger_dosing_pump(self, duration_ms=1500):
         """Trigger the pesticide/fertilizer dosing pump via Arduino.
-        Called by VisionMonitoringService when a disease is detected with
-        high confidence. Reuses this service's existing Arduino connection —
-        there's only one serial port, so the vision service doesn't open
-        its own connection, it calls this method instead."""
+        Called by VisionMonitoringService when disease or pest detection is
+        high-confidence. Reuses this service's existing Arduino connection —
+        there's only one serial port, so the vision service calls this
+        method instead of opening its own connection."""
         try:
             if not self.arduino or not self.arduino.is_open:
                 if not self.connect_arduino():
@@ -484,12 +484,9 @@ class SensorDataService:
         def monitoring_loop():
             while self.is_monitoring:
                 try:
-                    # store_sensor_data() reads from Arduino, saves the
-                    # reading, and internally calls check_auto_irrigation()
-                    # — this direct method call needs no HTTP request and
-                    # no auth token, unlike the /api/sensors/store-readings
-                    # route. store_sensor_data() already wraps itself in
-                    # self.app.app_context() when self.app is set.
+                    # Direct method call — no HTTP, no auth token needed,
+                    # unlike the /api/sensors/store-readings route. This
+                    # internally calls check_auto_irrigation() too.
                     success = self.store_sensor_data(user_id=DEFAULT_MONITORING_USER_ID)
                     if success:
                         logger.info("Auto monitoring: sensor data stored, auto-irrigation checked")

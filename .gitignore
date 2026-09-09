@@ -24,3 +24,7 @@ yarn-error.log*
 .vite/
 .next/
 backend/models
+backend/corn_raw
+backend/data
+backend/pest_data
+*.pt

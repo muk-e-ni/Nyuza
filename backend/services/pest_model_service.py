@@ -1,11 +1,11 @@
 """
-Nyuza — disease detection service
-------------------------------------
-Loads the corn disease classifier trained by train_leaf_model.py and exposes
-a predict() method for the vision routes / monitoring service to call.
-
-Follows the same load-once-at-startup pattern as services/ml_engine.py:
-a single global instance is created at the bottom of this file.
+Nyuza — pest detection service
+----------------------------------
+Loads the corn pest classifier (aphid, army_worm, corn_borer,
+potosia_brevitarsis, no_pest) trained via train_leaf_model.py on the IP102
+corn subset. Structurally identical to disease_model_service.py — same
+load-once pattern, same predict() shape — so vision_monitoring_service.py
+can treat both models the same way via the shared 'is_negative' key.
 """
 
 import os
@@ -17,15 +17,13 @@ from torchvision import models, transforms
 from PIL import Image
 
 
-class DiseaseModelService:
-    # The "nothing wrong" class for this model. Exposed as a constant so
-    # vision_monitoring_service.py can treat this service and
-    # pest_model_service.py the same way, despite each having a differently
-    # named negative class ('healthy' vs 'no_pest').
-    NEGATIVE_CLASS = 'healthy'
+class PestModelService:
+    # This model's "nothing wrong" class is 'no_pest', not 'healthy' —
+    # that's the only meaningful difference from DiseaseModelService.
+    NEGATIVE_CLASS = 'no_pest'
 
     def __init__(self):
-        self.model_path = os.path.join('models', 'disease_model.pt')
+        self.model_path = os.path.join('models', 'pest_model.pt')
         self.image_size = 224
         self.model = None
         self.classes = []
@@ -46,8 +44,8 @@ class DiseaseModelService:
     def load_model(self):
         try:
             if not os.path.exists(self.model_path):
-                print(f"⚠️  Disease model not found at {self.model_path} — "
-                      f"vision detection disabled until it's placed there")
+                print(f"⚠️  Pest model not found at {self.model_path} — "
+                      f"pest detection disabled until it's placed there")
                 return
 
             checkpoint = torch.load(self.model_path, map_location=self.device)
@@ -61,10 +59,10 @@ class DiseaseModelService:
             model.eval()
 
             self.model = model
-            print(f"✅ Disease model loaded successfully — classes: {self.classes}")
+            print(f"✅ Pest model loaded successfully — classes: {self.classes}")
 
         except Exception as e:
-            print(f"❌ Error loading disease model: {e}")
+            print(f"❌ Error loading pest model: {e}")
             self.model = None
 
     def is_ready(self):
@@ -73,7 +71,7 @@ class DiseaseModelService:
     def predict(self, image_bytes: bytes) -> dict:
         if not self.is_ready():
             raise RuntimeError(
-                "Disease model is not loaded — check that models/disease_model.pt exists"
+                "Pest model is not loaded — check that models/pest_model.pt exists"
             )
 
         image = Image.open(io.BytesIO(image_bytes)).convert('RGB')
@@ -90,9 +88,9 @@ class DiseaseModelService:
         return {
             'predicted_class': predicted_class,
             'confidence': round(confidence.item(), 4),
-            'is_healthy': is_negative,   # kept for backward compatibility
+            'is_no_pest': is_negative,   # named to match this model's semantics
             'is_negative': is_negative,  # generic key: true = "nothing wrong"
-            'model_version': 'disease_v1',
+            'model_version': 'pest_v1',
             'probabilities': {
                 cls: round(p.item(), 4)
                 for cls, p in zip(self.classes, probabilities)
@@ -101,4 +99,4 @@ class DiseaseModelService:
 
 
 # Global instance — loaded once when the Flask app imports this module.
-disease_model_service = DiseaseModelService()
+pest_model_service = PestModelService()

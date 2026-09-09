@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { systemAPI, zoneAPI, notificationAPI } from '../../services/api';
+import {
+  Settings as SettingsIcon,
+  WaterDrop as WaterDropIcon,
+  Map as MapIcon,
+  Notifications as NotificationsIcon,
+  SmartToy as SmartToyIcon,
+} from '@mui/icons-material';
 
 const SystemSettings = () => {
   const [settings, setSettings] = useState({});
@@ -226,11 +233,11 @@ const SystemSettings = () => {
   };
 
   const tabs = [
-    { id: 'general', name: 'General Settings', icon: '⚙️' },
-    { id: 'irrigation', name: 'Irrigation', icon: '💧' },
-    { id: 'zones', name: 'Zones', icon: '🗺️' },
-    { id: 'alerts', name: 'Alerts & Notifications', icon: '🔔' },
-    { id: 'ai', name: 'AI Settings', icon: '🤖' }
+    { id: 'general', name: 'General Settings', icon: <SettingsIcon sx={{ fontSize: 18 }} /> },
+    { id: 'irrigation', name: 'Irrigation', icon: <WaterDropIcon sx={{ fontSize: 18 }} /> },
+    { id: 'zones', name: 'Zones', icon: <MapIcon sx={{ fontSize: 18 }} /> },
+    { id: 'alerts', name: 'Alerts & Notifications', icon: <NotificationsIcon sx={{ fontSize: 18 }} /> },
+    { id: 'ai', name: 'AI Settings', icon: <SmartToyIcon sx={{ fontSize: 18 }} /> }
   ];
   const renderTabContent = () => {
      switch (activeTab) {
@@ -605,6 +612,3 @@ const SystemSettings = () => {
 };
 
 export default SystemSettings;
-
-
-  

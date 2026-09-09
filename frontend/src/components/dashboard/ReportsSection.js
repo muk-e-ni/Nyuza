@@ -1,6 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import { irrigationAPI, sensorAPI, recommendationAPI, systemAPI } from '../../services/api';
+import {
+  TrendingUp as TrendingUpIcon,
+  TrendingDown as TrendingDownIcon,
+  TrendingFlat as TrendingFlatIcon,
+  WaterDrop as WaterDropIcon,
+  SmartToy as SmartToyIcon,
+  CheckCircle as CheckCircleIcon,
+  HourglassEmpty as HourglassEmptyIcon,
+  PictureAsPdf as PictureAsPdfIcon,
+  BarChart as BarChartIcon,
+  Print as PrintIcon,
+} from '@mui/icons-material';
 
 const ReportsSection = () => {
   const [reportData, setReportData] = useState({});
@@ -439,7 +451,7 @@ const processRecommendations = (basicRecommendations, personalizedReport, compre
   };
 
   const getTrendIcon = (trend) => {
-    return trend === 'up' ? '📈' : trend === 'down' ? '📉' : '➡️';
+    return trend === 'up' ? <TrendingUpIcon sx={{ fontSize: 18 }} /> : trend === 'down' ? <TrendingDownIcon sx={{ fontSize: 18 }} /> : <TrendingFlatIcon sx={{ fontSize: 18 }} />;
   };
 
   const getTrendColor = (trend) => {
@@ -891,7 +903,7 @@ const printReport = () => {
           <div className="metric-header">
             <h3>Water Saved</h3>
             <span className="trend-indicator" style={{ color: '#27ae60' }}>
-              💧
+              <WaterDropIcon sx={{ fontSize: 20 }} />
             </span>
           </div>
           <div className="metric-value">{reportData.waterSaved?.current || 0}L</div>
@@ -970,7 +982,7 @@ const printReport = () => {
         {/* AI Insights Section */}
 {reportData.aiInsights?.hasAIInsights && (
   <div className="report-card ai-insights">
-    <h3>🤖 AI-Powered Insights</h3>
+    <h3 style={{ display: "flex", alignItems: "center", gap: 6 }}><SmartToyIcon sx={{ fontSize: 20 }} /> AI-Powered Insights</h3>
     
     {/* Personalized Insights */}
     {reportData.aiInsights.personalized && (
@@ -1034,7 +1046,7 @@ const printReport = () => {
               <span className={`impact-badge ${rec.impact}`}>
                 {rec.impact}
               </span>
-              {rec.isAI && <span className="ai-badge-small">🤖 AI</span>}
+              {rec.isAI && <span className="ai-badge-small" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><SmartToyIcon sx={{ fontSize: 12 }} /> AI</span>}
               {rec.source && <span className="source-badge">{rec.source}</span>}
             </div>
           </div>
@@ -1047,7 +1059,7 @@ const printReport = () => {
               disabled={rec.applied}
               onClick={() => handleApplyRecommendation(rec.id)}
             >
-              {rec.applied ? '✅ Applied' : 'Apply'}
+              {rec.applied ? (<span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><CheckCircleIcon sx={{ fontSize: 14 }} /> Applied</span>) : 'Apply'}
             </button>
             {!rec.applied && (
               <button 
@@ -1077,21 +1089,21 @@ const printReport = () => {
               onClick={() => exportReport('pdf')}
               disabled={exporting}
             >
-              {exporting ? '⏳' : '📊'} Export as PDF
+              {exporting ? <HourglassEmptyIcon sx={{ fontSize: 16 }} /> : <PictureAsPdfIcon sx={{ fontSize: 16 }} />} Export as PDF
             </button>
             <button 
               className="export-btn"
               onClick={() => exportReport('csv')}
               disabled={exporting}
             >
-              {exporting ? '⏳' : '📈'} Export as CSV
+              {exporting ? <HourglassEmptyIcon sx={{ fontSize: 16 }} /> : <BarChartIcon sx={{ fontSize: 16 }} />} Export as CSV
             </button>
             <button 
               className="export-btn"
               onClick={() => exportReport('print')}
               disabled={exporting}
             >
-              {exporting ? '⏳' : '🖨️'} Print Report
+              {exporting ? <HourglassEmptyIcon sx={{ fontSize: 16 }} /> : <PrintIcon sx={{ fontSize: 16 }} />} Print Report
             </button>
           </div>
           {exporting && <div className="exporting-message">Preparing download...</div>}

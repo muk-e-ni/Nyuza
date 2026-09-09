@@ -5,6 +5,7 @@ const int SOIL_MOISTURE_DIGITAL_PIN = 7;   //digital as backup
 const int ULTRASONIC_TRIG_PIN = 2;
 const int ULTRASONIC_ECHO_PIN = 3;
 const int RELAY_PIN = 6;
+const int DOSING_RELAY_PIN = 8;  // pesticide/fertilizer dosing pump — separate from irrigation
 
 // Sensor Configuration
 const bool RAIN_SENSOR_ACTIVE = LOW;
@@ -19,6 +20,11 @@ const int SOIL_MOISTURE_THRESHOLD = 40; // Auto irrigation threshold (percentage
 bool manualIrrigationInProgress = false;
 unsigned long manualIrrigationStartTime = 0;
 unsigned long manualIrrigationDuration = 0;
+
+// Dosing Pump Control (pesticide/fertilizer — triggered by the vision models)
+bool dosingInProgress = false;
+unsigned long dosingStartTime = 0;
+unsigned long dosingDuration = 0;
 
 // Auto Mode Control
 bool autoMode = true; // Start with auto mode enabled
@@ -48,9 +54,11 @@ void setup() {
   pinMode(ULTRASONIC_TRIG_PIN, OUTPUT);
   pinMode(ULTRASONIC_ECHO_PIN, INPUT);
   pinMode(RELAY_PIN, OUTPUT);
+  pinMode(DOSING_RELAY_PIN, OUTPUT);
   
   // Ensure pump is off initially
   digitalWrite(RELAY_PIN, HIGH);
+  digitalWrite(DOSING_RELAY_PIN, HIGH);
   
   // Initialize serial communication
   Serial.begin(9600);
@@ -142,6 +150,27 @@ void startIrrigation() {
   currentData.pumpStatus = true;
 }
 
+void startDosing(unsigned long duration) {
+  if (dosingInProgress) {
+    Serial.println("DOSE_FAILED: Dosing already in progress");
+    sendSensorDataJSON();
+    return;
+  }
+
+  dosingInProgress = true;
+  dosingStartTime = millis();
+  dosingDuration = duration;
+
+  digitalWrite(DOSING_RELAY_PIN, LOW); // Turn ON dosing pump
+  Serial.println("DOSE_STARTED: " + String(duration) + "ms");
+  sendSensorDataJSON();
+}
+
+void stopDosing() {
+  digitalWrite(DOSING_RELAY_PIN, HIGH); // Turn OFF dosing pump
+  dosingInProgress = false;
+}
+
 void stopIrrigation() {
   digitalWrite(RELAY_PIN, HIGH); // Turn OFF pump
   currentData.pumpStatus = false;
@@ -208,6 +237,14 @@ void checkIrrigationTimeouts() {
     Serial.println("AUTO_COMPLETED");
     sendSensorDataJSON();
   }
+
+  // Check dosing timeout
+  if (dosingInProgress &&
+      (currentTime - dosingStartTime >= dosingDuration)) {
+    stopDosing();
+    Serial.println("DOSE_COMPLETED");
+    sendSensorDataJSON();
+  }
 }
 
 void processSerialCommands() {
@@ -225,6 +262,16 @@ void processSerialCommands() {
         String durationStr = command.substring(colonIndex + 1);
         unsigned long duration = durationStr.toInt();
         startManualIrrigation(duration);
+      }
+    }
+    else if (command.startsWith("DOSE:")) {
+      // Format: DOSE:1500 (duration in milliseconds) — sent by the vision
+      // monitoring service when disease or pest detection is high-confidence
+      int colonIndex = command.indexOf(':');
+      if (colonIndex != -1) {
+        String durationStr = command.substring(colonIndex + 1);
+        unsigned long duration = durationStr.toInt();
+        startDosing(duration);
       }
     }
     else if (command == "STOP_IRRIGATION") {
@@ -274,6 +321,7 @@ void sendSensorDataJSON() {
   Serial.print(",\"manual_irrigation_in_progress\":"); Serial.print(manualIrrigationInProgress ? "true" : "false");
   Serial.print(",\"auto_irrigation_in_progress\":"); Serial.print(autoIrrigationInProgress ? "true" : "false");
   Serial.print(",\"auto_mode\":"); Serial.print(autoMode ? "true" : "false");
+  Serial.print(",\"dosing_in_progress\":"); Serial.print(dosingInProgress ? "true" : "false");
   
   if (manualIrrigationInProgress) {
     unsigned long remaining = manualIrrigationDuration - (millis() - manualIrrigationStartTime);

@@ -21,7 +21,13 @@ import {
   Thermostat,
   Refresh,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  Cloud,
+  Grain,
+  AcUnit,
+  Thunderstorm,
+  Foggy,
+  Spa
 } from '@mui/icons-material';
 
 const WeatherPanel = () => {
@@ -74,13 +80,13 @@ const WeatherPanel = () => {
 
   const getWeatherIcon = (description) => {
     const desc = description?.toLowerCase() || '';
-    if (desc.includes('rain') || desc.includes('drizzle')) return '🌧️';
-    if (desc.includes('cloud')) return '☁️';
-    if (desc.includes('clear') || desc.includes('sunny')) return '☀️';
-    if (desc.includes('snow')) return '❄️';
-    if (desc.includes('storm')) return '⛈️';
-    if (desc.includes('fog') || desc.includes('mist')) return '🌫️';
-    return '🌈';
+    if (desc.includes('rain') || desc.includes('drizzle')) return <Grain sx={{ fontSize: 'inherit', color: '#4FC3F7' }} />;
+    if (desc.includes('storm')) return <Thunderstorm sx={{ fontSize: 'inherit', color: '#5C6BC0' }} />;
+    if (desc.includes('snow')) return <AcUnit sx={{ fontSize: 'inherit', color: '#81D4FA' }} />;
+    if (desc.includes('fog') || desc.includes('mist')) return <Foggy sx={{ fontSize: 'inherit', color: '#B0BEC5' }} />;
+    if (desc.includes('cloud')) return <Cloud sx={{ fontSize: 'inherit', color: '#90A4AE' }} />;
+    if (desc.includes('clear') || desc.includes('sunny')) return <WbSunny sx={{ fontSize: 'inherit', color: '#FFD54F' }} />;
+    return <WbSunny sx={{ fontSize: 'inherit', color: '#78909C' }} />;
   };
 
   const getWeatherColor = (description) => {
@@ -194,8 +200,8 @@ const WeatherPanel = () => {
       <CardContent>
         {/* Current Weather Overview */}
         <Box sx={{ textAlign: 'center', mb: 3 }}>
-          <Typography variant="h3" sx={{ mb: 1 }}>
-            {getWeatherIcon(weatherData.description)}{' '}
+          <Typography variant="h3" sx={{ mb: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+            {getWeatherIcon(weatherData.description)}
             {Math.round(weatherData.temperature)}°C
           </Typography>
           <Typography 
@@ -308,8 +314,8 @@ const WeatherPanel = () => {
           border: 1,
           borderColor: 'divider'
         }}>
-          <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
-            🌱 Irrigation Impact
+          <Typography variant="subtitle2" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Spa sx={{ fontSize: 16 }} /> Irrigation Impact
           </Typography>
           {getWeatherImpact(weatherData, irrigationImpact)}
         </Box>

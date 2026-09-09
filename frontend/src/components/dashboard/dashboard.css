@@ -1,52 +1,52 @@
 .dashboard-container {
   display: flex;
   min-height: 100vh;
-  background-color: whitesmoke;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background-color: #faf6f0;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
 /* Sidebar Styles */
 .sidebar {
-  width: 300px;
-  background: linear-gradient(135deg, #676f77 70%, #ecf0f1 30%);
-  color: black;
+  width: 260px;
+  background: #3c4e43;
+  color: #faf6f0;
   
   display: flex;
   flex-direction: column;
-  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+  box-shadow: 2px 0 10px rgba(30, 39, 34, 0.08);
   position: fixed;
   height: 100vh;
   overflow-y: auto;
 }
 
 .sidebar-header {
-  padding: 30px 20px;
-  border-bottom: 1px solid #34495e;
+  padding: 28px 20px;
+  border-bottom: 1px solid rgba(250, 246, 240, 0.12);
   text-align: center;
-  color: #000;
+  color: #faf6f0;
 }
 
 .sidebar-header h2 {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
+  font-size: 1.4rem;
+  font-weight: 700;
 }
 
 .sidebar-nav {
   flex: 1;
-  padding: 20px 0;
+  padding: 16px 0;
 }
 
 .nav-item {
   width: 100%;
-  padding: 15px 20px;
+  padding: 13px 20px;
   background: none;
   border: none;
-  color: black;
+  color: #faf6f0;
   text-align: left;
-  font-size: 2rem;
+  font-size: 0.95rem;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   border-left: 4px solid transparent;
   display: flex;
   align-items: center;
@@ -54,32 +54,32 @@
 }
 
 .nav-item:hover {
-  background-color: #34495e;
-  color: white;
+  background-color: rgba(250, 246, 240, 0.08);
+  color: #faf6f0;
 }
 
 .nav-item.active {
-  background-color: #3498db;
-  color: white;
-  border-left-color: #2980b9;
+  background-color: #2e7d32;
+  color: #ffffff;
+  border-left-color: #a8d5ab;
 }
 
 .nav-item.logout {
-  color: #e74c3c;
+  color: #e8a48f;
   margin-top: 20px;
-  border-top: 1px solid #638ab1;
+  border-top: 1px solid rgba(250, 246, 240, 0.12);
 }
 
 .nav-item.logout:hover {
-  background-color: #c0392b;
-  color:black;
+  background-color: #c04e37;
+  color: #ffffff;
 }
 
 .sidebar-footer {
   padding: 20px;
-  border-top: 1px solid #34495e;
+  border-top: 1px solid rgba(250, 246, 240, 0.12);
   font-size: 0.8rem;
-  color: #000000;
+  color: rgba(250, 246, 240, 0.7);
 }
 
 .contact-info p {
@@ -97,7 +97,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  margin-left: 280px;
+  margin-left: 260px;
   
 }
 .main-header {
@@ -1177,14 +1177,17 @@
 
 /* Responsive Design */
 @media (max-width: 768px) {
+  /* Desktop sidebar is fully hidden on mobile — MobileBottomNav (a
+     separate component) renders the mobile nav instead, so there's no
+     shared markup between the two layouts to fight over. */
   .sidebar {
-    width: 100%;
-    height: auto;
-    position: relative;
+    display: none;
   }
-  
+
+  /* Push content above the fixed bottom bar instead of under it */
   .main-panel {
     margin-left: 0;
+    padding-bottom: 76px;
   }
   
   .quick-overview,

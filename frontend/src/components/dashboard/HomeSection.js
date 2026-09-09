@@ -1,7 +1,31 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { sensorAPI, irrigationAPI, recommendationAPI, systemAPI } from '../../services/api';
+import { useMediaQuery } from '@mui/material';
+import { sensorAPI, irrigationAPI, recommendationAPI, systemAPI, weatherAPI } from '../../services/api';
+import {
+  WaterDrop as WaterDropIcon,
+  Insights as InsightsIcon,
+  Shield as ShieldIcon,
+  BugReport as BugReportIcon,
+  WarningAmber as WarningAmberIcon,
+  Refresh as RefreshIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Cloud as CloudIcon,
+  Air as AirIcon,
+  Bolt as BoltIcon,
+} from '@mui/icons-material';
+import { Box } from '@mui/material';
+import {
+  WeatherCard,
+  HealthRing,
+  QuickActionTile,
+  AlertRow,
+  MobileSectionTitle,
+  MobileCard,
+} from '../mobile/MobileUI';
 
 const HomeSection = ({ currentUser, onSectionChange }) => {
+  const isMobile = useMediaQuery('(max-width:768px)');
   const [sensorData, setSensorData] = useState({});
   const [moistureStatus, setMoistureStatus] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
@@ -12,6 +36,9 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
   const [dismissingRec, setDismissingRec] = useState(null);
   const [actionMessage, setActionMessage] = useState('');
   const [clearedAlerts, setClearedAlerts] = useState(new Set());
+  // Mobile weather card only — desktop already gets weather from WeatherPanel
+  // elsewhere on the page, so this stays scoped to the mobile branch.
+  const [mobileWeather, setMobileWeather] = useState(null);
   
   // Track last refresh time and data changes
   const lastRefreshRef = useRef(null);
@@ -118,6 +145,19 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
     
     return () => clearInterval(interval);
   }, [fetchDashboardData, recommendations]);
+
+  // Mobile-only weather fetch — isolated from the main dashboard refresh
+  // cycle above so it can't affect desktop behavior or timing.
+  useEffect(() => {
+    if (!isMobile) return;
+    let cancelled = false;
+    weatherAPI.getCurrentWeather()
+      .then((res) => {
+        if (!cancelled && res?.data) setMobileWeather(res.data);
+      })
+      .catch((err) => console.error('Mobile weather fetch error:', err));
+    return () => { cancelled = true; };
+  }, [isMobile]);
 
   // Manual refresh 
   const manualRefresh = async () => {
@@ -269,6 +309,100 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
     );
   }
 
+  // Mobile branch — uses the shared Figma-styled components. Desktop's
+  // render below is completely unmodified and unreachable from here.
+  if (isMobile) {
+    const criticalAlerts = getCriticalRecommendations();
+    const healthScore = systemHealth.database === 'online' && systemHealth.sensors === 'online' ? 92 : 70;
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, px: 2, py: 1.5, pb: 3 }}>
+        <WeatherCard
+          location={mobileWeather?.city || 'Farm'}
+          temperature={mobileWeather?.temperature !== undefined ? Math.round(mobileWeather.temperature) : undefined}
+          condition={mobileWeather?.description || 'Loading...'}
+          humidity={mobileWeather?.humidity}
+          windSpeed={mobileWeather?.wind_speed}
+        />
+
+        <HealthRing
+          score={healthScore}
+          title="Overall Farm Health"
+          description={
+            moistureStatus.some(z => z.needs_irrigation)
+              ? 'Some zones need irrigation — check Zone Status below.'
+              : 'Moisture is balanced across monitored zones.'
+          }
+        />
+
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, width: '100%' }}>
+          <MobileSectionTitle>Quick Actions</MobileSectionTitle>
+          <Box sx={{ display: 'flex', gap: 1.5, width: '100%' }}>
+            <QuickActionTile
+              icon={WaterDropIcon}
+              label="Irrigation"
+              colorIndex={0}
+              onClick={() => onSectionChange('irrigation')}
+            />
+            <QuickActionTile
+              icon={InsightsIcon}
+              label="Status"
+              colorIndex={1}
+              onClick={() => onSectionChange('status')}
+            />
+            <QuickActionTile
+              icon={ShieldIcon}
+              label="Pest"
+              colorIndex={2}
+              onClick={() => onSectionChange('vision')}
+            />
+            <QuickActionTile
+              icon={BugReportIcon}
+              label="Disease"
+              colorIndex={3}
+              onClick={() => onSectionChange('vision')}
+            />
+          </Box>
+        </Box>
+
+        <MobileCard sx={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+            <MobileSectionTitle
+              action={
+                criticalAlerts.length > 0 ? (
+                  <Box
+                    component="span"
+                    onClick={handleClearAllAlerts}
+                    sx={{ fontSize: 12, fontWeight: 600, color: '#3c4e43', cursor: 'pointer' }}
+                  >
+                    Dismiss All
+                  </Box>
+                ) : null
+              }
+            >
+              Recent Alerts
+            </MobileSectionTitle>
+          </Box>
+          {criticalAlerts.length === 0 ? (
+            <Box sx={{ py: 2, textAlign: 'center', color: '#8e9e94', fontSize: 13 }}>
+              No active alerts — all clear.
+            </Box>
+          ) : (
+            criticalAlerts.map((rec, idx) => (
+              <AlertRow
+                key={rec.id || rec.recommendation_id}
+                title={rec.title}
+                description={rec.description}
+                severity={rec.priority === 'critical' ? 'critical' : rec.priority === 'high' ? 'warning' : 'good'}
+                isLast={idx === criticalAlerts.length - 1}
+              />
+            ))
+          )}
+        </MobileCard>
+      </Box>
+    );
+  }
+
   return (
     <div className="home-section">
       <div className="welcome-section">
@@ -303,7 +437,9 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
           {Array.isArray(recommendations) && getCriticalRecommendations().length > 0 && (
             <div className="critical-alerts">
               <div className="alert-header">
-                <h4>⚠️ Critical Alerts ({getCriticalRecommendations().length})</h4>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <WarningAmberIcon sx={{ fontSize: 18, color: '#d87a00' }} /> Critical Alerts ({getCriticalRecommendations().length})
+                </h4>
                 <button 
                   className="clear-all-btn"
                   onClick={handleClearAllAlerts}
@@ -334,7 +470,11 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
               onClick={manualRefresh}
               disabled={loading}
             >
-              {loading ? 'Refreshing...' : '🔄 Refresh Data'}
+              {loading ? 'Refreshing...' : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <RefreshIcon sx={{ fontSize: 16 }} /> Refresh Data
+                </span>
+              )}
             </button>
             {actionMessage && (
               <span className="refresh-message">{actionMessage}</span>
@@ -395,7 +535,11 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
                     {zone.current_moisture || 0}%
                   </span>
                   <span className={`status ${zone.needs_irrigation ? 'needs-water' : 'adequate'}`}>
-                    {zone.needs_irrigation ? '💧 Needs Water' : '✅ Adequate'}
+                    {zone.needs_irrigation ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><WaterDropIcon sx={{ fontSize: 14 }} /> Needs Water</span>
+                    ) : (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><CheckCircleIcon sx={{ fontSize: 14 }} /> Adequate</span>
+                    )}
                   </span>
                 </div>
               ))
@@ -409,7 +553,7 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
       {/* Updated Sensor Cards Grid */}
       <div className="sensor-grid">
         <div className="sensor-card">
-          <div className="sensor-icon">💧</div>
+          <div className="sensor-icon"><WaterDropIcon sx={{ fontSize: 28 }} /></div>
           <h3>Soil Moisture</h3>
           <p className="sensor-value">{sensorData.soilMoisture !== undefined ? sensorData.soilMoisture + '%' : '--'}</p>
           <div className="sensor-status">
@@ -418,7 +562,7 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
         </div>
         
         <div className="sensor-card">
-          <div className="sensor-icon">🌧️</div>
+          <div className="sensor-icon"><CloudIcon sx={{ fontSize: 28 }} /></div>
           <h3>Rain Sensor</h3>
           <p className="sensor-value">{sensorData.rainSensor !== undefined ? sensorData.rainSensor : '--'}</p>
           <div className="sensor-status">
@@ -427,7 +571,7 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
         </div>
         
         <div className="sensor-card">
-          <div className="sensor-icon">💨</div>
+          <div className="sensor-icon"><AirIcon sx={{ fontSize: 28 }} /></div>
           <h3>Wind Speed</h3>
           <p className="sensor-value">--</p>
           <div className="sensor-status">
@@ -436,7 +580,7 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
         </div>
         
         <div className="sensor-card">
-          <div className="sensor-icon">⚡</div>
+          <div className="sensor-icon"><BoltIcon sx={{ fontSize: 28 }} /></div>
           <h3>Water Level</h3>
           <p className="sensor-value">{sensorData.waterLevel !== undefined ? sensorData.waterLevel + '%' : '--'}</p>
           <div className="sensor-status">
@@ -483,12 +627,12 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
                 {/* Show different content based on status */}
                 {rec.status === 'applied' ? (
                   <div className="rec-status">
-                    <span className="applied-badge">✅ Applied</span>
+                    <span className="applied-badge" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><CheckCircleIcon sx={{ fontSize: 14 }} /> Applied</span>
                     <small>Applied on: {rec.applied_at ? new Date(rec.applied_at).toLocaleDateString() : 'Recently'}</small>
                   </div>
                 ) : rec.status === 'dismissed' ? (
                   <div className="rec-status">
-                    <span className="dismissed-badge">❌ Dismissed</span>
+                    <span className="dismissed-badge" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><CancelIcon sx={{ fontSize: 14 }} /> Dismissed</span>
                   </div>
                 ) : (
                   <div className="rec-actions">

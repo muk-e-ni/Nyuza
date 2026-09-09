@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { sensorAPI, irrigationAPI, systemAPI, weatherAPI } from '../../services/api';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 const StatusSection = () => {
   const [systemStatus, setSystemStatus] = useState({});
@@ -391,7 +392,9 @@ const StatusSection = () => {
         
         <div className="status-actions">
           <button onClick={fetchStatusData} className="refresh-btn">
-            🔄 Refresh Status
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <RefreshIcon sx={{ fontSize: 18 }} /> Refresh Status
+            </span>
           </button>
         </div>
       </div>

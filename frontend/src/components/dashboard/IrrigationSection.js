@@ -1,5 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { irrigationAPI, sensorAPI } from '../../services/api';
+import {
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Info as InfoIcon,
+  Add as AddIcon,
+  Refresh as RefreshIcon,
+  Stop as StopIcon,
+  RocketLaunch as RocketLaunchIcon,
+  WaterDrop as WaterDropIcon,
+  SmartToy as SmartToyIcon,
+  Opacity as OpacityIcon,
+} from '@mui/icons-material';
 
 
 // Notification System Component
@@ -16,7 +28,7 @@ const Notification = ({ message, type, onClose }) => {
     <div className={`notification notification-${type}`}>
       <div className="notification-content">
         <span className="notification-icon">
-          {type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}
+          {type === 'success' ? <CheckCircleIcon sx={{ fontSize: 18, color: '#2e7d32' }} /> : type === 'error' ? <CancelIcon sx={{ fontSize: 18, color: '#c04e37' }} /> : <InfoIcon sx={{ fontSize: 18, color: '#3c4e43' }} />}
         </span>
         <span className="notification-message">{message}</span>
       </div>
@@ -475,18 +487,18 @@ const IrrigationSection = () => {
       {/* Quick Actions */}
       <div className="quick-actions">
         <button className="action-btn primary" onClick={() => setShowScheduleForm(true)} disabled={loading}>
-          ➕ Create Schedule
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><AddIcon sx={{ fontSize: 16 }} /> Create Schedule</span>
         </button>
         <button className="action-btn primary" onClick={triggerAutoModeCheck} disabled={loading || !selectedZoneId}>
-          🔄 Check Auto Mode
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><RefreshIcon sx={{ fontSize: 16 }} /> Check Auto Mode</span>
         </button>
         <button className="action-btn secondary" onClick={fetchIrrigationData} disabled={loading}>
-          🔄 Refresh Status
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><RefreshIcon sx={{ fontSize: 16 }} /> Refresh Status</span>
         </button>
 
         {Object.keys(activeIrrigations).length > 0 && (
           <button className="action-btn stop-all" onClick={handleStopAllIrrigation} disabled={loading}>
-            🛑 Stop All Irrigation
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><StopIcon sx={{ fontSize: 16 }} /> Stop All Irrigation</span>
           </button>
         )}
         
@@ -496,7 +508,7 @@ const IrrigationSection = () => {
       {/* Active Auto Irrigations */}
       {!isManualMode && getActiveAutoIrrigations().length > 0 && (
         <div className="active-auto-irrigations">
-          <h3>🚀 Active Auto Irrigations</h3>
+          <h3 style={{ display: "flex", alignItems: "center", gap: 6 }}><RocketLaunchIcon sx={{ fontSize: 20 }} /> Active Auto Irrigations</h3>
           <div className="active-irrigations-grid">
             {getActiveAutoIrrigations().map(schedule => (
               <div key={schedule.id} className="active-irrigation-card">
@@ -514,7 +526,7 @@ const IrrigationSection = () => {
                   onClick={() => handleStopIrrigation(schedule.zone_name)}
                   disabled={loading}
                 >
-                  🛑 Stop Irrigation
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><StopIcon sx={{ fontSize: 16 }} /> Stop Irrigation</span>
                 </button>
               </div>
             ))}
@@ -557,7 +569,11 @@ const IrrigationSection = () => {
                         <>
                           <p>Moisture: <strong>{zoneStatus.current_moisture}%</strong></p>
                           <p className={zoneStatus.needs_irrigation ? 'status-warning' : 'status-ok'}>
-                            {zoneStatus.needs_irrigation ? '💧 Needs Water' : '✅ Adequate'}
+                            {zoneStatus.needs_irrigation ? (
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><WaterDropIcon sx={{ fontSize: 14 }} /> Needs Water</span>
+                            ) : (
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><CheckCircleIcon sx={{ fontSize: 14 }} /> Adequate</span>
+                            )}
                           </p>
                         </>
                       ) : (
@@ -572,7 +588,7 @@ const IrrigationSection = () => {
                           className="btn-stop"
                           disabled={loading}
                         >
-                          🛑 Stop Irrigation
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><StopIcon sx={{ fontSize: 16 }} /> Stop Irrigation</span>
                         </button>
                       ) : (
                         <>
@@ -621,7 +637,7 @@ const IrrigationSection = () => {
                         <span className={`status-badge ${schedule.is_active ? 'active' : 'inactive'}`}>
                           {schedule.is_active ? 'Active' : 'Inactive'}
                         </span>
-                        {isAutoMode && <span className="auto-mode-badge">🤖 AUTO</span>}
+                        {isAutoMode && <span className="auto-mode-badge" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><SmartToyIcon sx={{ fontSize: 12 }} /> AUTO</span>}
                       </div>
                     </div>
                     
@@ -658,7 +674,11 @@ const IrrigationSection = () => {
                       <div className="detail-row">
                         <label>Auto Mode Status:</label>
                         <span className={zoneStatus?.needs_irrigation ? 'status-warning' : 'status-ok'}>
-                          {zoneStatus?.needs_irrigation ? '🚰 Ready to irrigate' : '✅ Conditions met'}
+                          {zoneStatus?.needs_irrigation ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><OpacityIcon sx={{ fontSize: 14 }} /> Ready to irrigate</span>
+                          ) : (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><CheckCircleIcon sx={{ fontSize: 14 }} /> Conditions met</span>
+                          )}
                         </span>
                       </div>
                     </div>
@@ -706,7 +726,11 @@ const IrrigationSection = () => {
                 </div>
                 <div className="threshold-info">Threshold: {status.moisture_threshold}%</div>
                 <div className={`action-needed ${status.needs_irrigation ? 'yes' : 'no'}`}>
-                  {status.needs_irrigation ? '🚰 Irrigation Needed' : '✅ OK'}
+                  {status.needs_irrigation ? (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><OpacityIcon sx={{ fontSize: 14 }} /> Irrigation Needed</span>
+                  ) : (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><CheckCircleIcon sx={{ fontSize: 14 }} /> OK</span>
+                  )}
                 </div>
               </div>
             ))}

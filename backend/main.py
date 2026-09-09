@@ -13,14 +13,15 @@ from functools import wraps
 from flask_cors import CORS
 from routes.weather_routes import weather_bp
 from routes.ai_routes import ai_bp
+from routes.vision_routes import vision_bp
 from routes.profile_update_routes import profile_bp
 from services.sensor_service import sensor_service
+from services.vision_monitoring_service import vision_monitoring_service
 import logging
 import traceback
 import atexit
 from routes.notification_routes import notification_bp
 from routes.preferences_routes import preferences_bp
-from routes.vision_routes import vision_bp
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +42,7 @@ CORS(app)
 
 # Initialize sensor service with app
 sensor_service.init_app(app)
+vision_monitoring_service.init_app(app)
 
 # Register routes with correct URL prefixes
 app.register_blueprint(auth_bp, url_prefix='/auth')
@@ -51,10 +53,9 @@ app.register_blueprint(system_bp, url_prefix='/system')
 app.register_blueprint(recommendation_bp, url_prefix='/recommendations')
 app.register_blueprint(weather_bp, url_prefix='/weather')
 app.register_blueprint(ai_bp, url_prefix = '/ai')
+app.register_blueprint(vision_bp, url_prefix='/vision')
 app.register_blueprint(notification_bp, url_prefix='/notifications')
 app.register_blueprint(preferences_bp, url_prefix='/profile')
-app.register_blueprint(vision_bp, url_prefix='/vision')
-
 
 # Track if services are running
 services_started = False
@@ -83,6 +84,10 @@ def initialize_services():
         # Initialize sensor service
         sensor_service.start_scheduled_monitoring()
         logger.info("✅ Sensor service started successfully")
+
+        # Initialize vision monitoring (camera -> disease + pest detection, automatic)
+        vision_monitoring_service.start_monitoring()
+        logger.info("✅ Vision monitoring service started successfully")
         
         # Start cleanup task
         sensor_service.run_cleanup_task()
@@ -99,6 +104,7 @@ def stop_services():
     if services_started:
         try:
             sensor_service.stop_monitoring()
+            vision_monitoring_service.stop_monitoring()
             logger.info("🛑 Services stopped gracefully")
             services_started = False
         except Exception as e:

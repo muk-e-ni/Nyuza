@@ -221,14 +221,13 @@ class PlantHealthReading(database.Model):
     reading_id = database.Column(database.Integer, primary_key=True)
     user_id = database.Column(database.Integer, database.ForeignKey('users.user_id'), nullable=False)
     zone_id = database.Column(database.Integer, database.ForeignKey('irrigation_zones.zone_id'), nullable=True)
-    predicted_class = database.Column(database.String(50), nullable=False)  # e.g. common_rust, healthy
+    predicted_class = database.Column(database.String(50), nullable=False)  # e.g. common_rust, aphid, healthy, no_pest
     confidence = database.Column(database.Float, nullable=False)  # 0.0 - 1.0
-    is_healthy = database.Column(database.Boolean, nullable=False, default=False)
+    is_healthy = database.Column(database.Boolean, nullable=False, default=False)  # true = nothing wrong (healthy or no_pest)
     image_path = database.Column(database.String(255))  # relative path to the saved image, if kept
-    model_version = database.Column(database.String(50))  # e.g. 'disease_v1'
+    model_version = database.Column(database.String(50))  # e.g. 'disease_v1' or 'pest_v1'
     timestamp = database.Column(database.DateTime, default=datetime.now)
 
-    # Index for performance
     __table_args__ = (
         database.Index('idx_planthealth_zone_time', 'zone_id', 'timestamp'),
     )

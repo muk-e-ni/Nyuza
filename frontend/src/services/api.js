@@ -171,11 +171,9 @@ export const aiAPI = {
 
 
 export const visionAPI = {
-  getHistory: (limit = 20, zoneId = null) => {
-    const params = { limit };
-    if (zoneId) params.zone_id = zoneId;
-    return api.get('/vision/history', { params });
-  },
+  // Backend only exposes disease detection today (services/disease_model_service.py).
+  // Pest detection (services referenced a pest model) isn't wired into vision_routes.py
+  // yet, so there's no endpoint to call here for pests.
   detectDisease: (imageFile, zoneId = null) => {
     const formData = new FormData();
     formData.append('image', imageFile);
@@ -184,13 +182,18 @@ export const visionAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  detectPest: (imageFile, zoneId = null) => {
+    detectPest: (imageFile, zoneId = null) => {
     const formData = new FormData();
     formData.append('image', imageFile);
     if (zoneId) formData.append('zone_id', zoneId);
     return api.post('/vision/detect-pest', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
+  },
+  getHistory: (zoneId = null, limit = 20) => {
+    const params = { limit };
+    if (zoneId) params.zone_id = zoneId;
+    return api.get('/vision/history', { params });
   },
 };
 

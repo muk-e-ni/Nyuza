@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useMediaQuery } from '@mui/material';
 import { useAuth } from '../../context/AuthContext';
 import HomeSection from './HomeSection';
 import StatusSection from './StatusSection';
@@ -7,36 +6,16 @@ import IrrigationSection from './IrrigationSection';
 import ReportsSection from './ReportsSection';
 import SystemSettings from './SystemSettings';
 import ProfileSettings from './ProfileSettings';
-import MobileBottomNav from './MobileBottomNav';
-import {
-  Home as HomeIcon,
-  Insights as InsightsIcon,
-  CameraAlt as CameraIcon,
-  WaterDrop as WaterDropIcon,
-  BarChart as ReportsIcon,
-  Settings as SettingsIcon,
-  Person as ProfileIcon,
-  Logout as LogoutIcon,
-  CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon,
-  Info as InfoIcon,
-  Notifications as NotificationsIcon,
-  SmartToy as SmartToyIcon,
-  Spa as SpaIcon,
-  Phone as PhoneIcon,
-  Email as EmailIcon,
-} from '@mui/icons-material';
+import VisionMonitoringSection from './VisionMonitoringSection';
 import './Dashboard.css';
 import './irrigation.css';
 import './reports.css';
 import './home.css';
 
-import WeatherPanel from '../weather/WeatherPanel';
 import AIRecommendationPanel from '../ai/AIRecommendationPanel';
-import VisionMonitoringPanel from '../vision/VisionMonitoringPanel';
-import { zoneAPI, aiAPI } from '../../services/api';
+import { zoneAPI } from '../../services/api';
+import { nyuzaColors as c } from '../../Theme';
 import {
-  Grid,
   Box,
   Typography,
   Select,
@@ -44,12 +23,23 @@ import {
   FormControl,
   InputLabel,
   Button,
-  Paper,
   CircularProgress,
   Alert,
   Snackbar,
-  Badge
+  Badge,
+  IconButton,
+  Stack,
 } from '@mui/material';
+import DashboardRoundedIcon from '@mui/icons-material/DashboardRounded';
+import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded';
+import ShowChartRoundedIcon from '@mui/icons-material/ShowChartRounded';
+import AssessmentRoundedIcon from '@mui/icons-material/AssessmentRounded';
+import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
+import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
+import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
+import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
+import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
+import EnergySavingsLeafRoundedIcon from '@mui/icons-material/EnergySavingsLeafRounded';
 
 // Notification System Components
 const Notification = ({ message, type, onClose }) => {
@@ -65,7 +55,7 @@ const Notification = ({ message, type, onClose }) => {
     <div className={`notification notification-${type}`}>
       <div className="notification-content">
         <span className="notification-icon">
-          {type === 'success' ? <CheckCircleIcon sx={{ fontSize: 18, color: '#2e7d32' }} /> : type === 'error' ? <CancelIcon sx={{ fontSize: 18, color: '#c04e37' }} /> : <InfoIcon sx={{ fontSize: 18, color: '#3c4e43' }} />}
+          {type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}
         </span>
         <span className="notification-message">{message}</span>
       </div>
@@ -108,24 +98,24 @@ const NotificationCenter = ({ notifications, onClearAll, onRemoveNotification, o
 
   return (
     <div className="notification-center">
-      <Badge 
-        badgeContent={unreadCount} 
-        color="error" 
+      <Badge
+        badgeContent={unreadCount}
+        color="error"
         overlap="circular"
-        sx={{ 
+        sx={{
           '& .MuiBadge-badge': {
-            fontSize: '12px',
-            height: '20px',
-            minWidth: '20px',
+            fontSize: '11px',
+            height: '18px',
+            minWidth: '18px',
           }
         }}
       >
-        <button 
-          className="notification-center-toggle"
+        <IconButton
           onClick={() => setIsOpen(!isOpen)}
+          sx={{ bgcolor: 'white', border: `1px solid ${c.border}`, width: 36, height: 36 }}
         >
-          <NotificationsIcon sx={{ fontSize: 22, color: '#1e2722' }} />
-        </button>
+          <NotificationsRoundedIcon sx={{ fontSize: 18, color: c.textDark }} />
+        </IconButton>
       </Badge>
 
       {isOpen && (
@@ -164,7 +154,7 @@ const NotificationCenter = ({ notifications, onClearAll, onRemoveNotification, o
           <div className="notification-list">
             {notifications.length === 0 ? (
               <div className="no-notifications">
-                <div className="no-notifications-icon"><NotificationsIcon sx={{ fontSize: 32, color: '#8e9e94' }} /></div>
+                <div className="no-notifications-icon">🔔</div>
                 <p>No notifications yet</p>
                 <small>System notifications will appear here</small>
               </div>
@@ -177,8 +167,8 @@ const NotificationCenter = ({ notifications, onClearAll, onRemoveNotification, o
                 >
                   <div className="notification-item-content">
                     <span className="notification-icon">
-                      {notification.type === 'success' ? <CheckCircleIcon sx={{ fontSize: 18, color: '#2e7d32' }} /> : 
-                       notification.type === 'error' ? <CancelIcon sx={{ fontSize: 18, color: '#c04e37' }} /> : <InfoIcon sx={{ fontSize: 18, color: '#3c4e43' }} />}
+                      {notification.type === 'success' ? '✅' : 
+                       notification.type === 'error' ? '❌' : 'ℹ️'}
                     </span>
                     <div className="notification-text">
                       <p className="notification-message">
@@ -213,7 +203,6 @@ const NotificationCenter = ({ notifications, onClearAll, onRemoveNotification, o
 };
 const Dashboard = () => {
   const [activeSection, setActiveSection] = useState('home');
-  const isMobile = useMediaQuery('(max-width:768px)');
   const [zones, setZones] = useState([]);
   const [currentZoneId, setCurrentZoneId] = useState(null);
   const [loadingZones, setLoadingZones] = useState(true);
@@ -354,112 +343,82 @@ const Dashboard = () => {
                 ))}
               </div>
 
-              <Grid container spacing={3}>
-                {/* Main Content - 8 columns */}
-                <Grid item xs={12} md={8}>
-                  <HomeSection 
-                    currentUser={currentUser} 
-                    onSectionChange={setActiveSection} 
-                    {...sectionProps}
-                  />
-                  
-                  {/* AI Recommendation Panel Section */}
-                  <Paper elevation={3} sx={{ p: 3, mt: 3 }}>
-                    <Typography variant="h5" gutterBottom sx={{ 
-                      display: 'flex', 
-                      alignItems: 'center',
-                      gap: 1,
-                      color: 'primary.main',
-                      borderBottom: '2px solid',
-                      borderColor: 'primary.main',
-                      pb: 1
-                    }}>
-                      <SmartToyIcon sx={{ fontSize: 22 }} /> AI Irrigation Advisor
-                    </Typography>
-                    
-                    {loadingZones ? (
-                      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 4 }}>
-                        <CircularProgress size={24} />
-                        <Typography variant="body1" sx={{ ml: 2 }}>
-                          Loading irrigation zones...
-                        </Typography>
-                      </Box>
-                    ) : zoneError ? (
-                      <Alert severity="warning" sx={{ mb: 2 }}>
-                        {zoneError}
-                      </Alert>
-                    ) : zones.length > 0 ? (
-                      <Box sx={{ mb: 3 }}>
-                        <FormControl fullWidth size="small">
-                          <InputLabel id="zone-select-label">Select Irrigation Zone</InputLabel>
-                          <Select
-                            labelId="zone-select-label"
-                            value={currentZoneId || ''}
-                            label="Select Irrigation Zone"
-                            onChange={(e) => setCurrentZoneId(e.target.value)}
-                          >
-                            {zones.map(zone => (
-                              <MenuItem key={zone.zone_id} value={zone.zone_id}>
-                                {zone.zone_name} 
-                                {zone.current_moisture && ` (${zone.current_moisture}% moisture)`}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </Box>
-                    ) : (
-                      <Box sx={{ textAlign: 'center', py: 3 }}>
-                        <Typography variant="body1" color="text.secondary" gutterBottom>
-                          No irrigation zones configured.
-                        </Typography>
-                        <Button 
-                          variant="contained" 
-                          onClick={() => setActiveSection('system-settings')}
-                          sx={{ mt: 1 }}
+              <HomeSection
+                currentUser={currentUser}
+                onSectionChange={setActiveSection}
+                {...sectionProps}
+              />
+
+              {/* AI Advisor */}
+              <Box sx={{ mt: 4 }}>
+                <Typography variant="h5" sx={{ fontWeight: 800, color: c.textDark, textAlign: 'center', mb: 2.5 }}>
+                  AI Advisor
+                </Typography>
+                <Box sx={{ bgcolor: 'white', border: `1px solid ${c.border}`, borderRadius: 4, p: 3, maxWidth: 800, mx: 'auto' }}>
+                  {loadingZones ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 3 }}>
+                      <CircularProgress size={22} sx={{ color: c.primaryGreen }} />
+                      <Typography variant="body2" sx={{ ml: 2, color: c.textBody }}>
+                        Loading irrigation zones...
+                      </Typography>
+                    </Box>
+                  ) : zoneError ? (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      {zoneError}
+                    </Alert>
+                  ) : zones.length > 0 ? (
+                    <Box sx={{ mb: 3 }}>
+                      <FormControl fullWidth size="small">
+                        <InputLabel id="zone-select-label">Select Irrigation Zone</InputLabel>
+                        <Select
+                          labelId="zone-select-label"
+                          value={currentZoneId || ''}
+                          label="Select Irrigation Zone"
+                          onChange={(e) => setCurrentZoneId(e.target.value)}
                         >
-                          Configure Zones in System Settings
-                        </Button>
-                      </Box>
-                    )}
-                    
-                    {/* AI Recommendation Panel */}
-                    {currentZoneId && zones.length > 0 && (
-                      <AIRecommendationPanel 
-                        zoneId={currentZoneId} 
-                        zoneName={zones.find(z => z.zone_id === currentZoneId)?.zone_name}
-                        onNotification={addNotification}
-                      />
-                    )}
-                  </Paper>
-                </Grid>
+                          {zones.map(zone => (
+                            <MenuItem key={zone.zone_id} value={zone.zone_id}>
+                              {zone.zone_name}
+                              {zone.current_moisture && ` (${zone.current_moisture}% moisture)`}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Box>
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 3 }}>
+                      <Typography variant="body2" sx={{ color: c.textBody, mb: 1.5 }}>
+                        No irrigation zones configured.
+                      </Typography>
+                      <Button
+                        variant="contained"
+                        onClick={() => setActiveSection('system-settings')}
+                        sx={{ bgcolor: c.sidebarActive, '&:hover': { bgcolor: '#152018' } }}
+                      >
+                        Configure Zones in System Settings
+                      </Button>
+                    </Box>
+                  )}
 
-                {/* Weather Panel - 4 columns */}
-                <Grid item xs={12} md={4}>
-                  <WeatherPanel onNotification={addNotification} />
-                </Grid>
-              </Grid>
-
-              {/* Vision Monitoring preview — full width, not zone-scoped.
-                  A dedicated, focused page also exists at the 'vision'
-                  section (sidebar + mobile quick-action tiles) for when
-                  more room/history is needed than this home preview shows. */}
-              <Box sx={{ mt: 3 }}>
-                <VisionMonitoringPanel />
+                  {currentZoneId && zones.length > 0 && (
+                    <AIRecommendationPanel
+                      zoneId={currentZoneId}
+                      zoneName={zones.find(z => z.zone_id === currentZoneId)?.zone_name}
+                      onNotification={addNotification}
+                    />
+                  )}
+                </Box>
               </Box>
             </Box>
           );
+      case 'vision':
+        return <VisionMonitoringSection {...sectionProps} />;
       case 'status':
         return <StatusSection 
           zones={zones} 
           currentZoneId={currentZoneId} 
           {...sectionProps}
         />;
-      case 'vision':
-        return (
-          <Box sx={{ px: { xs: 2, md: 0 }, py: { xs: 1.5, md: 0 } }}>
-            <VisionMonitoringPanel />
-          </Box>
-        );
       case 'irrigation':
         return <IrrigationSection 
           zones={zones} 
@@ -496,8 +455,28 @@ const Dashboard = () => {
   // Get current zone name for display
   const currentZone = zones.find(z => (z.zone_id || z.id) === currentZoneId);
 
+  const navItems = [
+    { key: 'home', label: 'Dashboard', icon: DashboardRoundedIcon },
+    { key: 'irrigation', label: 'Irrigation', icon: WaterDropRoundedIcon },
+    { key: 'status', label: 'System Status', icon: ShowChartRoundedIcon },
+    { key: 'reports', label: 'Reports & Analytics', icon: AssessmentRoundedIcon },
+    { key: 'vision', label: 'Vision Monitoring', icon: VisibilityRoundedIcon },
+    { key: 'system-settings', label: 'System Settings', icon: SettingsRoundedIcon },
+    { key: 'profile-settings', label: 'Profile Settings', icon: PersonRoundedIcon },
+  ];
+
+  const sectionTitles = {
+    home: `Welcome, ${currentUser?.username || 'User'}`,
+    irrigation: 'Irrigation',
+    status: 'System Status',
+    reports: 'Reports & Analytics',
+    vision: 'Vision Monitoring',
+    'system-settings': 'System Settings',
+    'profile-settings': 'Profile Settings',
+  };
+
   return (
-    <div className="dashboard-container">
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: c.background }}>
       {/* Toast Notifications Container */}
       <div className="notification-container">
         {toastNotifications.map(notification => (
@@ -511,196 +490,119 @@ const Dashboard = () => {
       </div>
 
       {/* Sidebar */}
-      <div className="sidebar">
-        <div className="sidebar-header">
-          <Typography variant="h6" component="h2" sx={{ fontWeight: 'bold', color: '#faf6f0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-            <SpaIcon sx={{ fontSize: 22 }} /> Smart Irrigation
-          </Typography>
+      <Box
+        sx={{
+          width: 280,
+          flexShrink: 0,
+          bgcolor: 'white',
+          borderRight: `1px solid ${c.border}`,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          p: 3,
+          minHeight: '100vh',
+        }}
+      >
+        <Box>
+          <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 4 }}>
+            <Box sx={{ bgcolor: c.sidebarActive, borderRadius: 2, p: 1, display: 'flex' }}>
+              <EnergySavingsLeafRoundedIcon sx={{ color: 'white', fontSize: 20 }} />
+            </Box>
+            <Typography sx={{ fontFamily: '"Roboto", sans-serif', fontWeight: 800, fontSize: 24, color: c.sidebarActive }}>
+              Nyuza
+            </Typography>
+          </Stack>
+
           {currentZone && (
-            <Box sx={{ mt: 1, p: 1, bgcolor: 'rgba(250,246,240,0.1)', borderRadius: 1 }}>
-              <Typography variant="caption" sx={{ color: '#faf6f0', fontWeight: 'bold' }}>
-                Currently Irrigated Zone: {currentZone.zone_name || currentZone.name}
+            <Box sx={{ mb: 2, p: 1.2, bgcolor: c.chipGreenBg, borderRadius: 2 }}>
+              <Typography variant="caption" sx={{ color: c.textDark, fontWeight: 700 }}>
+                Irrigating: {currentZone.zone_name || currentZone.name}
               </Typography>
             </Box>
           )}
-        </div>
-        
-        <nav className="sidebar-nav">
-          <Button 
-            fullWidth
-            className={`nav-item ${activeSection === 'home' ? 'active' : ''}`}
-            onClick={() => setActiveSection('home')}
-            sx={{ 
-              justifyContent: 'flex-start', 
-              color: 'white',
-              textTransform: 'none',
-              fontSize: '16px'
-            }}
-            startIcon={<HomeIcon sx={{ fontSize: 20 }} />}
-          >
-            Home
-          </Button>
-          
-          <Button 
-            fullWidth
-            className={`nav-item ${activeSection === 'status' ? 'active' : ''}`}
-            onClick={() => setActiveSection('status')}
-            sx={{ 
-              justifyContent: 'flex-start', 
-              color: 'white',
-              textTransform: 'none',
-              fontSize: '16px'
-            }}
-            startIcon={<InsightsIcon sx={{ fontSize: 20 }} />}
-          >
-            System Status
-          </Button>
 
-          <Button 
+          <Stack spacing={0.5}>
+            {navItems.map(({ key, label, icon: Icon }) => {
+              const active = activeSection === key;
+              return (
+                <Button
+                  key={key}
+                  fullWidth
+                  onClick={() => setActiveSection(key)}
+                  startIcon={<Icon sx={{ fontSize: 18 }} />}
+                  sx={{
+                    justifyContent: 'flex-start',
+                    px: 2,
+                    py: 1.3,
+                    borderRadius: 2,
+                    bgcolor: active ? c.sidebarActive : 'transparent',
+                    color: active ? 'white' : c.textBody,
+                    fontWeight: active ? 600 : 500,
+                    fontSize: 14,
+                    '&:hover': { bgcolor: active ? c.sidebarActive : c.chipGreenBg },
+                  }}
+                >
+                  {label}
+                </Button>
+              );
+            })}
+          </Stack>
+        </Box>
+
+        <Box>
+          <Button
             fullWidth
-            className={`nav-item ${activeSection === 'vision' ? 'active' : ''}`}
-            onClick={() => setActiveSection('vision')}
-            sx={{ 
-              justifyContent: 'flex-start', 
-              color: 'white',
-              textTransform: 'none',
-              fontSize: '16px'
-            }}
-            startIcon={<CameraIcon sx={{ fontSize: 20 }} />}
-          >
-            Vision Monitoring
-          </Button>
-          
-          <Button 
-            fullWidth
-            className={`nav-item ${activeSection === 'irrigation' ? 'active' : ''}`}
-            onClick={() => setActiveSection('irrigation')}
-            sx={{ 
-              justifyContent: 'flex-start', 
-              color: 'white',
-              textTransform: 'none',
-              fontSize: '16px'
-            }}
-            startIcon={<WaterDropIcon sx={{ fontSize: 20 }} />}
-          >
-            Irrigation Control
-          </Button>
-          
-          <Button 
-            fullWidth
-            className={`nav-item ${activeSection === 'reports' ? 'active' : ''}`}
-            onClick={() => setActiveSection('reports')}
-            sx={{ 
-              justifyContent: 'flex-start', 
-              color: 'white',
-              textTransform: 'none',
-              fontSize: '16px'
-            }}
-            startIcon={<ReportsIcon sx={{ fontSize: 20 }} />}
-          >
-            Reports & Analytics
-          </Button>
-          
-          <Button 
-            fullWidth
-            className={`nav-item ${activeSection === 'system-settings' ? 'active' : ''}`}
-            onClick={() => setActiveSection('system-settings')}
-            sx={{ 
-              justifyContent: 'flex-start', 
-              color: 'white',
-              textTransform: 'none',
-              fontSize: '16px'
-            }}
-            startIcon={<SettingsIcon sx={{ fontSize: 20 }} />}
-          >
-            System Settings
-          </Button>
-          
-          <Button 
-            fullWidth
-            className={`nav-item ${activeSection === 'profile-settings' ? 'active' : ''}`}
-            onClick={() => setActiveSection('profile-settings')}
-            sx={{ 
-              justifyContent: 'flex-start', 
-              color: 'white',
-              textTransform: 'none',
-              fontSize: '16px'
-            }}
-            startIcon={<ProfileIcon sx={{ fontSize: 20 }} />}
-          >
-            Profile Settings
-          </Button>
-          
-          <Button 
-            fullWidth
-            className="nav-item logout"
             onClick={logout}
-            sx={{ 
-              justifyContent: 'flex-start', 
-              color: 'white',
-              textTransform: 'none',
-              fontSize: '16px',
-              mt: 2
-            }}
-            startIcon={<LogoutIcon sx={{ fontSize: 20 }} />}
+            startIcon={<LogoutRoundedIcon sx={{ fontSize: 18 }} />}
+            sx={{ justifyContent: 'flex-start', color: c.textBody, mb: 2, px: 2 }}
           >
             Log Out
           </Button>
-        </nav>
-
-        {/* Footer */}
-        <div className="sidebar-footer">
-          <div className="contact-info">
-            <Typography variant="caption" display="block" sx={{ color: '#faf6f0', display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <PhoneIcon sx={{ fontSize: 14 }} /> Tel. +254-758861709
-            </Typography>
-            <Typography variant="caption" display="block" sx={{ color: '#faf6f0', display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-              <EmailIcon sx={{ fontSize: 14 }} /> email: brandon.brad204@gmail.com
-            </Typography>
-          </div>
-          <div className="copyright">
-            <Typography variant="caption" display="block" sx={{ color: '#faf6f0', opacity: 0.7 }}>
-              created by Brandon with bugs
-            </Typography>
-            <Typography variant="caption" display="block" sx={{ color: '#faf6f0', opacity: 0.7 }}>
-              © 2025 All Rights Reserved
-            </Typography>
-          </div>
-        </div>
-      </div> 
-    
-
-     {/* Mobile bottom nav — separate component, only rendered on mobile.
-          Desktop sidebar above is untouched; CSS hides it below 768px. */}
-      {isMobile && (
-        <MobileBottomNav
-          activeSection={activeSection}
-          onSectionChange={setActiveSection}
-          onLogout={logout}
-        />
-      )} 
-
-      {/* Main Content */}
-      <div className="main-panel">
-        <header className="main-header">
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="h6">
-              {currentUser?.username || 'User'}
-            </Typography>
-            <Typography 
-              variant="body2" 
-              sx={{ 
-                bgcolor: 'primary.main', 
-                color: 'white', 
-                px: 1, 
-                py: 0.5, 
-                borderRadius: 1 
+          <Box
+            sx={{
+              bgcolor: c.background,
+              border: `1px solid ${c.border}`,
+              borderRadius: 3,
+              p: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+            }}
+          >
+            <Box
+              sx={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                bgcolor: c.chipGreenBg,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
               }}
             >
-              {currentUser?.role || 'user'}
-            </Typography>
-            
-            {/* Notification Center in Header */}
+              <PersonRoundedIcon sx={{ fontSize: 18, color: c.primaryGreen }} />
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="body2" noWrap sx={{ fontWeight: 700, color: c.textDark }}>
+                {currentUser?.username || 'Operator'}
+              </Typography>
+              <Typography variant="caption" noWrap sx={{ color: c.textMuted, display: 'block' }}>
+                {currentUser?.role || 'System Admin'}
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+      </Box>
+
+      {/* Main Content */}
+      <Box sx={{ flex: 1, minWidth: 0, p: 5 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4, flexWrap: 'wrap', gap: 2 }}>
+          <Typography sx={{ fontFamily: '"Roboto", sans-serif', fontWeight: 700, fontSize: 32, color: c.textDark }}>
+            {sectionTitles[activeSection] || 'Nyuza'}
+          </Typography>
+
+          <Stack direction="row" spacing={2} alignItems="center">
             <NotificationCenter
               notifications={notifications}
               onClearAll={clearAllNotifications}
@@ -708,16 +610,24 @@ const Dashboard = () => {
               onMarkAllAsRead={markAllAsRead}
               onMarkAsRead={markAsRead}
             />
-          </Box>
-          <Typography variant="body2" color="text.secondary">
-            {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
-          </Typography>
-        </header>
+            <Box
+              sx={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                bgcolor: c.chipGreenBg,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <PersonRoundedIcon sx={{ fontSize: 18, color: c.textDark }} />
+            </Box>
+          </Stack>
+        </Stack>
 
-        <div className="main-content">
-          {renderActiveSection()}
-        </div>
-      </div>
+        {renderActiveSection()}
+      </Box>
 
       <Snackbar
         open={snackbarOpen}
@@ -725,7 +635,7 @@ const Dashboard = () => {
         onClose={() => setSnackbarOpen(false)}
         message="Zone data loaded successfully"
       />
-    </div>
+    </Box>
   );
 };
 

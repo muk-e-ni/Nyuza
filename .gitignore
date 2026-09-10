@@ -27,4 +27,6 @@ backend/models
 backend/corn_raw
 backend/data
 backend/pest_data
+backend/static
+*.patch
 *.pt

@@ -1,109 +1,82 @@
 import { createTheme } from '@mui/material/styles';
 
-/**
- * Nyuza theme — derived from the Figma mobile design (warm cream + forest
- * green, rounded cards, Inter typeface).
- *
- * This is the single source of truth for color/shape/typography. Because
- * every screen already uses @mui/material components (Paper, Card, Button,
- * Chip, etc.), wrapping the app in a ThemeProvider with this theme restyles
- * the whole product without touching any component's logic or markup.
- */
+// Design tokens pulled directly from the Figma file
+// (LmjEWSPST9pYB4vZGF22Fd — "nyuza_design", desktop shell + Home/System Status/Vision Monitoring)
+const colors = {
+  background: '#faf9f5',
+  surface: '#ffffff',
+  border: '#ede9e1',
+  sidebarActive: '#1e2f23',
+  primaryGreen: '#2e7d32',
+  secondaryGreen: '#3c4e43',
+  chipGreenBg: '#ecefea',
+  textDark: '#1e2722',
+  textBody: '#5c6a61',
+  textMuted: '#8e9e94',
+  danger: '#c04e37',
+  dangerBg: '#fdf2f0',
+  warning: '#d87a00',
+  warningBg: '#fff3e0',
+};
 
 const theme = createTheme({
   palette: {
     mode: 'light',
+    background: {
+      default: colors.background,
+      paper: colors.surface,
+    },
     primary: {
-      main: '#2e7d32',       // target/positive green — buttons, active states, success
-      dark: '#1e2722',
-      light: '#4c9a51',
+      main: colors.sidebarActive,
       contrastText: '#ffffff',
     },
     secondary: {
-      main: '#3c4e43',       // deep forest green — nav chrome, dark chips
-      light: '#5c6a61',
-      contrastText: '#ffffff',
-    },
-    error: {
-      main: '#c04e37',       // deficit/alert red-orange (matches "current" bar in Figma)
-    },
-    warning: {
-      main: '#d98c2b',
+      main: colors.primaryGreen,
     },
     success: {
-      main: '#2e7d32',
+      main: colors.primaryGreen,
     },
-    background: {
-      default: '#faf6f0',    // warm cream page background
-      paper: '#ffffff',
+    warning: {
+      main: colors.warning,
+    },
+    error: {
+      main: colors.danger,
     },
     text: {
-      primary: '#1e2722',
-      secondary: '#5c6a61',
+      primary: colors.textDark,
+      secondary: colors.textBody,
+      disabled: colors.textMuted,
     },
-    divider: '#ede9e1',
+    divider: colors.border,
   },
-
   shape: {
-    borderRadius: 14,
+    borderRadius: 12,
   },
-
   typography: {
-    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    h1: { fontWeight: 700 },
-    h2: { fontWeight: 700 },
-    h3: { fontWeight: 700 },
-    h4: { fontWeight: 700 },
-    h5: { fontWeight: 700 },
-    h6: { fontWeight: 700 },
+    fontFamily: "'Inter', 'Roboto', 'Helvetica', 'Arial', sans-serif",
+    h1: { fontFamily: "'Roboto', sans-serif", fontWeight: 800 },
+    h2: { fontFamily: "'Roboto', sans-serif", fontWeight: 700 },
+    h3: { fontFamily: "'Roboto', sans-serif", fontWeight: 700 },
+    h4: { fontFamily: "'Roboto', sans-serif", fontWeight: 700 },
+    h5: { fontFamily: "'Roboto', sans-serif", fontWeight: 700 },
+    h6: { fontFamily: "'Roboto', sans-serif", fontWeight: 700 },
     button: { textTransform: 'none', fontWeight: 600 },
   },
-
   components: {
-    MuiCssBaseline: {
+    MuiButton: {
       styleOverrides: {
-        body: {
-          backgroundColor: '#faf6f0',
-        },
+        root: { borderRadius: 8 },
       },
     },
     MuiPaper: {
       styleOverrides: {
-        root: {
-          borderRadius: 16,
-        },
-      },
-      defaultProps: {
-        elevation: 0,
-      },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          borderRadius: 16,
-          border: '1px solid #ede9e1',
-          boxShadow: 'none',
-        },
-      },
-    },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          borderRadius: 12,
-          textTransform: 'none',
-          fontWeight: 600,
-        },
-      },
-    },
-    MuiChip: {
-      styleOverrides: {
-        root: {
-          borderRadius: 999,
-          fontWeight: 600,
-        },
+        root: { backgroundImage: 'none' },
       },
     },
   },
 });
 
+// Exported separately so section components can reference exact design-token
+// hex values without reaching into theme.palette in non-obvious ways.
+export const nyuzaColors = colors;
 export default theme;

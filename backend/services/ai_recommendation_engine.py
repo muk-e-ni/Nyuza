@@ -7,8 +7,40 @@ from services.weather_service import weather_service
 class AIRecommendationEngine:
     def __init__(self):
         self.ollama_service = ollama_service
-        
-    def generate_intelligent_recommendations(self, user_id, zone_id=None):
+        # In-memory cache for Ollama-backed results: serve the last generated
+        # result indefinitely per cache key, until the caller explicitly asks
+        # for force_refresh=True. This is what "click refresh if you want a
+        # new one" maps to — no TTL, no background regeneration, just: don't
+        # call Ollama again unless asked. Resets on server restart, which is
+        # fine for this use case.
+        self._result_cache = {}
+
+    def _cached_or_generate(self, cache_key, generator_fn, force_refresh=False):
+        if not force_refresh and cache_key in self._result_cache:
+            cached = self._result_cache[cache_key]
+            result = dict(cached) if isinstance(cached, dict) else cached
+            if isinstance(result, dict):
+                result['cached'] = True
+            return result
+
+        result = generator_fn()
+        self._result_cache[cache_key] = result
+        if isinstance(result, dict):
+            result = dict(result)
+            result['cached'] = False
+        return result
+
+    def generate_intelligent_recommendations(self, user_id, zone_id=None, force_refresh=False):
+        """Generate AI-powered irrigation recommendations — cached per (user, zone)
+        until force_refresh=True is passed."""
+        cache_key = ('recommendations', user_id, zone_id)
+        return self._cached_or_generate(
+            cache_key,
+            lambda: self._generate_intelligent_recommendations_impl(user_id, zone_id),
+            force_refresh,
+        )
+
+    def _generate_intelligent_recommendations_impl(self, user_id, zone_id=None):
         """Generate AI-powered irrigation recommendations"""
         try:
             # Get comprehensive data for analysis
@@ -271,13 +303,22 @@ class AIRecommendationEngine:
     def analyze_irrigation_event(self, user_id, zone_id, log_id):
         """Analyze a specific irrigation event for optimization"""
         try:
-            # This can be called after each irrigation event
-            # For now, we'll just trigger the recommendation engine
-            self.generate_intelligent_recommendations(user_id, zone_id)
+            # This can be called after each irrigation event — something just
+            # changed, so this is exactly the case that should bypass the cache.
+            self.generate_intelligent_recommendations(user_id, zone_id, force_refresh=True)
         except Exception as e:
             print(f"Event analysis error: {e}")
 
-    def generate_personalized_report(self, user_id, days):
+    def generate_personalized_report(self, user_id, days, force_refresh=False):
+        """Generate personalized report for a user — cached per (user, days)."""
+        cache_key = ('personalized_report', user_id, days)
+        return self._cached_or_generate(
+            cache_key,
+            lambda: self._generate_personalized_report_impl(user_id, days),
+            force_refresh,
+        )
+
+    def _generate_personalized_report_impl(self, user_id, days):
         """Generate personalized report for a user"""
         try:
             # Get analysis data
@@ -309,7 +350,16 @@ class AIRecommendationEngine:
         except Exception as e:
             return {'success': False, 'error': str(e)}
     
-    def generate_comprehensive_report(self, user_id, days):
+    def generate_comprehensive_report(self, user_id, days, force_refresh=False):
+        """Generate comprehensive AI analysis report — cached per (user, days)."""
+        cache_key = ('comprehensive_report', user_id, days)
+        return self._cached_or_generate(
+            cache_key,
+            lambda: self._generate_comprehensive_report_impl(user_id, days),
+            force_refresh,
+        )
+
+    def _generate_comprehensive_report_impl(self, user_id, days):
         """Generate comprehensive AI analysis report"""
         try:
             analysis_data = self._gather_analysis_data(user_id, None)
@@ -357,7 +407,18 @@ class AIRecommendationEngine:
         if metrics['total_irrigation_events'] > 0:
             return metrics['total_water_used'] / metrics['total_irrigation_events']
         return 0
-    def generate_weather_insights(self, current_weather, forecast, user_id):
+    def generate_weather_insights(self, current_weather, forecast, user_id, force_refresh=False):
+        """Generate AI insights specifically for weather data — cached per user.
+        Raw weather numbers are already cached separately at the weather_service
+        level; this caches just the Ollama-generated narrative on top of them."""
+        cache_key = ('weather_insights', user_id)
+        return self._cached_or_generate(
+            cache_key,
+            lambda: self._generate_weather_insights_impl(current_weather, forecast, user_id),
+            force_refresh,
+        )
+
+    def _generate_weather_insights_impl(self, current_weather, forecast, user_id):
         """Generate AI insights specifically for weather data"""
         try:
             analysis_data = self._gather_analysis_data(user_id, None)

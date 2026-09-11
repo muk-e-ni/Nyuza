@@ -34,12 +34,12 @@ const ReportsSection = () => {
     }
   };
 
-const fetchReportData = async () => {
+const fetchReportData = async (forceRefresh = false) => {
   setLoading(true);
   setError(null);
   try {
     const days = getDaysFromRange();
-    console.log('Fetching report data for', days, 'days');
+    console.log('Fetching report data for', days, 'days', forceRefresh ? '(forced refresh)' : '(cache OK)');
     
     // Fetch real data from APIs with proper error handling
     const [
@@ -76,7 +76,7 @@ const fetchReportData = async () => {
     let comprehensiveReport = {};
     
     try {
-      const personalizedResponse = await recommendationAPI.getPersonalizedReport(days);
+      const personalizedResponse = await recommendationAPI.getPersonalizedReport(days, forceRefresh);
       personalizedReport = personalizedResponse?.data || {};
       console.log('Personalized report response:', personalizedReport);
     } catch (err) {
@@ -85,7 +85,7 @@ const fetchReportData = async () => {
     }
     
     try {
-      const comprehensiveResponse = await recommendationAPI.getComprehensiveReport(days);
+      const comprehensiveResponse = await recommendationAPI.getComprehensiveReport(days, forceRefresh);
       comprehensiveReport = comprehensiveResponse?.data || {};
       console.log('Comprehensive report response:', comprehensiveReport);
     } catch (err) {
@@ -845,7 +845,7 @@ const printReport = () => {
             <option value="90d">Last 90 Days</option>
           </select>
         </div>
-        <button onClick={fetchReportData} className="btn-secondary">
+        <button onClick={() => fetchReportData(true)} className="btn-secondary">
           Refresh Data
         </button>
       </div>

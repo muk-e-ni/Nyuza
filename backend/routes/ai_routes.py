@@ -46,11 +46,12 @@ def get_personalized_recommendations():
     try:
         user_id = request.user_id
         zone_id = request.args.get('zone_id', type=int)
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
         
-        print(f"🔍 AI Personalized Recommendation - User: {user_id}, Zone: {zone_id}")
+        print(f"🔍 AI Personalized Recommendation - User: {user_id}, Zone: {zone_id}, refresh={force_refresh}")
         
-        # Use the real AI engine
-        result = ai_recommendation_engine.generate_intelligent_recommendations(user_id, zone_id)
+        # Use the real AI engine (cached unless force_refresh)
+        result = ai_recommendation_engine.generate_intelligent_recommendations(user_id, zone_id, force_refresh=force_refresh)
         
         print(f"✅ AI Recommendation generated - Ollama: {result.get('ollama_available', False)}")
         
@@ -67,11 +68,12 @@ def get_smart_recommendation():
     try:
         user_id = request.user_id
         zone_id = request.args.get('zone_id', type=int)
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
         
-        print(f"🔍 AI Smart Recommendation - User: {user_id}, Zone: {zone_id}")
+        print(f"🔍 AI Smart Recommendation - User: {user_id}, Zone: {zone_id}, refresh={force_refresh}")
         
-        # Use the real AI engine
-        result = ai_recommendation_engine.generate_intelligent_recommendations(user_id, zone_id)
+        # Use the real AI engine (cached unless force_refresh)
+        result = ai_recommendation_engine.generate_intelligent_recommendations(user_id, zone_id, force_refresh=force_refresh)
         
         return jsonify(result)
         

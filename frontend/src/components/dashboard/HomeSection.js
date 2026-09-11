@@ -53,9 +53,9 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
     }
   }, []);
 
-  const fetchWeather = useCallback(async () => {
+  const fetchWeather = useCallback(async (forceRefresh = false) => {
     try {
-      const response = await weatherAPI.getWeatherDashboard();
+      const response = await weatherAPI.getWeatherDashboard(forceRefresh);
       if (response?.data?.success) {
         return response.data.current_weather || null;
       }
@@ -65,7 +65,7 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
     return null;
   }, []);
 
-  const fetchDashboardData = useCallback(async () => {
+  const fetchDashboardData = useCallback(async (forceRefresh = false) => {
     try {
       setLoading(true);
 
@@ -75,7 +75,7 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
         irrigationAPI.getHistory(),
         systemAPI.getHealth(),
         fetchSensorData(),
-        fetchWeather(),
+        fetchWeather(forceRefresh),
       ]);
 
       lastRefreshRef.current = Date.now();
@@ -128,7 +128,7 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
 
   const manualRefresh = async () => {
     setActionMessage('Refreshing...');
-    await fetchDashboardData();
+    await fetchDashboardData(true);
     setActionMessage('');
   };
 

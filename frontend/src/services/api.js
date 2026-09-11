@@ -84,11 +84,13 @@ export const recommendationAPI = {
   applyRecommendation: (recId) => api.post(`/recommendations/api/recommendations/${recId}/apply`),
   dismissRecommendation: (recId) => api.post(`/recommendations/api/recommendations/${recId}/dismiss`),
 
- getPersonalizedReport: (days = 7) => {
-    return api.get(`/recommendations/api/personalized-report/${days}`);
+ getPersonalizedReport: (days = 7, forceRefresh = false) => {
+    const params = forceRefresh ? { refresh: true } : {};
+    return api.get(`/recommendations/api/personalized-report/${days}`, { params });
   }, 
-  getComprehensiveReport: (days = 30) => {
-    return api.get(`/recommendations/api/comprehensive-report/${days}`);
+  getComprehensiveReport: (days = 30, forceRefresh = false) => {
+    const params = forceRefresh ? { refresh: true } : {};
+    return api.get(`/recommendations/api/comprehensive-report/${days}`, { params });
   },
   getSmartRecommendation: (zoneId = null) => {
     const params = zoneId ? { zone_id: zoneId } : {};
@@ -123,7 +125,8 @@ export const systemAPI = {
 export const weatherAPI = {
   getCurrentWeather: (params = {}) => api.get('/weather/api/weather/current', { params }),
   getForecast: (params = {}) => api.get('/weather/api/weather/forecast', { params }),
-  getWeatherDashboard: () => api.get('/weather/api/weather/dashboard'),
+  getWeatherDashboard: (forceRefresh = false) =>
+    api.get('/weather/api/weather/dashboard', { params: forceRefresh ? { refresh: true } : {} }),
   getWeatherHistory: (days = 7) => api.get(`/weather/api/weather/history?days=${days}`),
   getIrrigationAdvice: (zoneId = null) => {
     const params = zoneId ? { zone_id: zoneId } : {};
@@ -141,12 +144,14 @@ export const zoneAPI = {
 };
 
 export const aiAPI = {
-  getSmartRecommendation: (zoneId = null) => {
+  getSmartRecommendation: (zoneId = null, forceRefresh = false) => {
     const params = zoneId ? { zone_id: zoneId } : {};
+    if (forceRefresh) params.refresh = true;
     return api.get('/ai/smart-recommendation', { params });
   },
-  getPersonalizedRecommendations: (zoneId = null) => {
+  getPersonalizedRecommendations: (zoneId = null, forceRefresh = false) => {
     const params = zoneId ? { zone_id: zoneId } : {};
+    if (forceRefresh) params.refresh = true;
     return api.get('/ai/personalized-recommendations', { params });
   },
   getComprehensiveReport: (days = 30) => {
@@ -171,9 +176,18 @@ export const aiAPI = {
 
 
 export const visionAPI = {
-  // Backend only exposes disease detection today (services/disease_model_service.py).
-  // Pest detection (services referenced a pest model) isn't wired into vision_routes.py
-  // yet, so there's no endpoint to call here for pests.
+  // Runs every ready model (disease + pest) against one image — replaces
+  // choosing between detectDisease/detectPest, which is what caused the
+  // frontend to guess wrong about which check applied.
+  analyze: (imageFile, zoneId = null) => {
+    const formData = new FormData();
+    formData.append('image', imageFile);
+    if (zoneId) formData.append('zone_id', zoneId);
+    return api.post('/vision/analyze', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  // Kept for direct/manual testing of a single model — most UI should use analyze() instead.
   detectDisease: (imageFile, zoneId = null) => {
     const formData = new FormData();
     formData.append('image', imageFile);
@@ -182,7 +196,7 @@ export const visionAPI = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-    detectPest: (imageFile, zoneId = null) => {
+  detectPest: (imageFile, zoneId = null) => {
     const formData = new FormData();
     formData.append('image', imageFile);
     if (zoneId) formData.append('zone_id', zoneId);
@@ -195,6 +209,15 @@ export const visionAPI = {
     if (zoneId) params.zone_id = zoneId;
     return api.get('/vision/history', { params });
   },
+  getStatus: () => api.get('/vision/status'),
+  // Authenticated snapshot fetch — use this (not snapshotUrl) anywhere the
+  // request needs the Authorization header, e.g. "capture from live feed".
+  getSnapshotBlob: () => api.get('/vision/snapshot', { responseType: 'blob' }),
+  // Not axios calls — these are plain URLs for <img> tags.
+  // /snapshot below is unauthenticated-URL form and will 401; kept only as
+  // a reference. /stream deliberately has no auth so a plain <img src> can
+  // consume it (see backend docstring for the tradeoff).
+  streamUrl: () => `${API_BASE_URL}/vision/stream`,
 };
 
 export const notificationAPI = {

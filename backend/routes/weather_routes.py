@@ -56,8 +56,9 @@ def get_current_weather():
         lat = request.args.get('lat', type=float)
         lng = request.args.get('lng', type=float)
         city = request.args.get('city')
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
         
-        weather_data = weather_service.get_current_weather(lat, lng, city)
+        weather_data = weather_service.get_current_weather(lat, lng, city, force_refresh=force_refresh)
         return jsonify(weather_data)
         
     except Exception as e:
@@ -68,11 +69,8 @@ def get_current_weather():
 def get_weather_forecast():
     """Get weather forecast"""
     try:
-        lat = request.args.get('lat', type=float)
-        lng = request.args.get('lng', type=float)
-        city = request.args.get('city')
-        
-        forecast = weather_service.get_forecast(lat, lng, city)
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
+        forecast = weather_service.get_forecast(force_refresh=force_refresh)
         return jsonify(forecast)
         
     except Exception as e:
@@ -84,12 +82,13 @@ def get_weather_dashboard():
     """Get comprehensive weather data for dashboard"""
     try:
         user_id = request.user_id
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
         
         # Get current weather
-        current_weather = weather_service.get_current_weather()
+        current_weather = weather_service.get_current_weather(force_refresh=force_refresh)
         
         # Get forecast
-        forecast = weather_service.get_forecast()
+        forecast = weather_service.get_forecast(force_refresh=force_refresh)
         
         # Get recent weather history (last 24 hours)
         twenty_four_hours_ago = datetime.now() - timedelta(hours=24)
@@ -101,11 +100,12 @@ def get_weather_dashboard():
         # Calculate weather trends
         weather_trends = calculate_weather_trends(recent_weather)
         
-        # Get AI-powered weather insights
+        # Get AI-powered weather insights (Ollama-backed — cached, see ai_recommendation_engine)
         ai_insights = ai_recommendation_engine.generate_weather_insights(
             current_weather, 
             forecast, 
-            user_id
+            user_id,
+            force_refresh=force_refresh
         )
         
         return jsonify({

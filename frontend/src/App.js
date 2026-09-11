@@ -4,7 +4,7 @@ import { ThemeProvider, CssBaseline } from '@mui/material';
 import theme from './Theme';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './components/auth/login';
-import Dashboard from './components/dashboard/Dashboard';
+import Dashboard from './components/dashboard/dashboard';
 import './App.css';
 import Register from './components/auth/register';
 import AIDashboard from './components/ai/AIRecommendationPanel';

@@ -154,6 +154,7 @@ def get_personalized_report(days):
     """Get personalized report with user-specific insights"""
     try:
         user_id = request.user_id
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
         
         if not user_id:
             return jsonify({
@@ -161,7 +162,7 @@ def get_personalized_report(days):
                 'error': 'User identity not found'
             }), 401
         
-        result = ai_recommendation_engine.generate_personalized_report(user_id, days)
+        result = ai_recommendation_engine.generate_personalized_report(user_id, days, force_refresh=force_refresh)
         
         return jsonify(result)
         
@@ -178,6 +179,7 @@ def get_comprehensive_report(days):
     """Get comprehensive AI analysis report"""
     try:
         user_id = request.user_id
+        force_refresh = request.args.get('refresh', 'false').lower() == 'true'
         
         if not user_id:
             return jsonify({
@@ -185,7 +187,7 @@ def get_comprehensive_report(days):
                 'error': 'User identity not found'
             }), 401
         
-        result = ai_recommendation_engine.generate_comprehensive_report(user_id, days)
+        result = ai_recommendation_engine.generate_comprehensive_report(user_id, days, force_refresh=force_refresh)
         
         return jsonify(result)
         

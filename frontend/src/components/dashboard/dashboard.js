@@ -7,7 +7,7 @@ import ReportsSection from './ReportsSection';
 import SystemSettings from './SystemSettings';
 import ProfileSettings from './ProfileSettings';
 import VisionMonitoringSection from './VisionMonitoringSection';
-import './Dashboard.css';
+import './dashboard.css';
 import './irrigation.css';
 import './reports.css';
 import './home.css';

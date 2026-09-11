@@ -120,7 +120,7 @@ const AIRecommendationPanel = ({ zoneId, zoneName }) => {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   };
 
-  const fetchRecommendations = async () => {
+  const fetchRecommendations = async (forceRefresh = false) => {
     try {
       setLoading(true);
       setError(null);
@@ -135,11 +135,11 @@ const AIRecommendationPanel = ({ zoneId, zoneName }) => {
       let aiResponse;
       try {
         // Try AI endpoint first
-        aiResponse = await aiAPI.getPersonalizedRecommendations(zoneId);
+        aiResponse = await aiAPI.getPersonalizedRecommendations(zoneId, forceRefresh);
         console.log('✅ AI recommendations received:', aiResponse.data);
       } catch (aiError) {
         console.log('❌ AI endpoint failed, trying smart recommendation...');
-        aiResponse = await aiAPI.getSmartRecommendation(zoneId);
+        aiResponse = await aiAPI.getSmartRecommendation(zoneId, forceRefresh);
       }
       
       if (aiResponse?.data?.success) {
@@ -364,7 +364,7 @@ Continue monitoring and water when moisture drops below 40%`;
   }, [zoneId]);
 
   const handleRefresh = () => {
-    fetchRecommendations();
+    fetchRecommendations(true);
   };
 
   const handleApplyRecommendation = async () => {

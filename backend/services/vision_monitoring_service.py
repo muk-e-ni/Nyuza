@@ -49,9 +49,27 @@ class VisionMonitoringService:
         self.is_monitoring = False
         self.monitoring_thread = None
         self.camera_source = CAMERA_SOURCE
+        self.last_check_time = None
+        self.last_check_results = []
 
     def init_app(self, app):
         self.app = app
+
+    def get_status(self):
+        """Everything the frontend needs to render the 'Active Feed Modules'
+        panel honestly: is the background loop running, is a camera even
+        configured, and when did it last actually run."""
+        return {
+            'monitoring_active': self.is_monitoring,
+            'camera_configured': bool(self.camera_source),
+            'check_interval_seconds': CHECK_INTERVAL_SECONDS,
+            'auto_dose_threshold': AUTO_DOSE_THRESHOLD,
+            'dose_cooldown_seconds': DOSE_COOLDOWN_SECONDS,
+            'disease_model_ready': disease_model_service.is_ready(),
+            'pest_model_ready': pest_model_service.is_ready(),
+            'last_check_time': self.last_check_time.isoformat() if self.last_check_time else None,
+            'last_check_results': self.last_check_results,
+        }
 
     def start_monitoring(self):
         if self.is_monitoring:
@@ -99,6 +117,77 @@ class VisionMonitoringService:
 
         return frame
 
+    def capture_snapshot_bytes(self):
+        """Grab a single JPEG frame from the configured camera right now —
+        used by the manual 'capture from live feed' flow, and by /vision/snapshot
+        for a still preview of the 'Active Feed Modules' tile."""
+        frame = self._capture_frame()
+        if frame is None:
+            return None
+        success, buffer = cv2.imencode(".jpg", frame)
+        if not success:
+            return None
+        return buffer.tobytes()
+
+    def stream_frames(self):
+        """Generator yielding one open, persistent capture as an MJPEG
+        multipart stream. Opens its own cv2.VideoCapture, separate from the
+        one the background loop uses for periodic checks — most IP camera
+        servers (e.g. Android IP Webcam) support multiple simultaneous MJPEG
+        viewers fine, but this hasn't been load-tested against the real
+        camera, so treat concurrent viewers as a known unknown."""
+        cap = cv2.VideoCapture(self.camera_source)
+        if not cap.isOpened():
+            logger.error(f"Stream: could not open camera source: {self.camera_source}")
+            return
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                success, buffer = cv2.imencode(".jpg", frame)
+                if not success:
+                    continue
+                frame_bytes = buffer.tobytes()
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n"
+                )
+        finally:
+            cap.release()
+
+    def analyze_image(self, image_bytes, user_id, zone_id=None, save=True):
+        """Run every ready model against ONE already-captured image and
+        return the results — no auto-dose decision here. Used by both:
+          - the manual 'Analyze' flow in Vision Monitoring (uploaded photo
+            or a snapshot the farmer chose to submit), where a human is in
+            the loop and should decide on treatment themselves; and
+          - _check_once() below, which layers the auto-dose policy on top
+            for the unattended camera loop.
+        This is also the fix for models 'getting confused about which check
+        to run': the frontend no longer has to pick disease vs. pest — both
+        run, always, and the result tells you which (if either) found
+        something."""
+        results = []
+
+        if disease_model_service.is_ready():
+            disease_result = disease_model_service.predict(image_bytes)
+            results.append(disease_result)
+
+        if pest_model_service.is_ready():
+            pest_result = pest_model_service.predict(image_bytes)
+            results.append(pest_result)
+
+        if not results:
+            return results
+
+        if save:
+            image_path = save_plant_image(image_bytes, user_id, "check")
+            for result in results:
+                self._log_reading(user_id, zone_id, result, image_path)
+
+        return results
+
     def _check_once(self, user_id=1, zone_id=None):
         """One full check: capture -> run both models -> decide -> act.
         Both models run against the exact same frame, so a single capture
@@ -120,28 +209,22 @@ class VisionMonitoringService:
             return
 
         image_bytes = buffer.tobytes()
-        # Both readings come from the same frame — save the image once and
-        # reuse the path for both DB rows, rather than saving it twice.
-        image_path = save_plant_image(image_bytes, user_id, "check")
+        results = self.analyze_image(image_bytes, user_id, zone_id, save=True)
 
-        results = []
-        if disease_ready:
-            disease_result = disease_model_service.predict(image_bytes)
-            results.append(disease_result)
-            self._log_reading(user_id, zone_id, disease_result, image_path)
-            logger.info(
-                f"Disease check — {disease_result['predicted_class']} "
-                f"({disease_result['confidence']:.2%})"
-            )
+        self.last_check_time = datetime.now()
+        self.last_check_results = [
+            {
+                'predicted_class': r['predicted_class'],
+                'confidence': r['confidence'],
+                'is_negative': r['is_negative'],
+                'model_version': r['model_version'],
+            }
+            for r in results
+        ]
 
-        if pest_ready:
-            pest_result = pest_model_service.predict(image_bytes)
-            results.append(pest_result)
-            self._log_reading(user_id, zone_id, pest_result, image_path)
-            logger.info(
-                f"Pest check — {pest_result['predicted_class']} "
-                f"({pest_result['confidence']:.2%})"
-            )
+        for r in results:
+            kind = 'Disease' if r['model_version'].startswith('disease') else 'Pest'
+            logger.info(f"{kind} check — {r['predicted_class']} ({r['confidence']:.2%})")
 
         # Split this cycle's findings into "problem" results (something
         # other than healthy/no_pest) vs everything else.

@@ -4,14 +4,34 @@ from datetime import datetime, timedelta
 from models import WeatherData, database
 import json
 
+# How long a cached weather/forecast response is served before a fresh call
+# is made automatically. Manual refresh (force_refresh=True) always bypasses this.
+CURRENT_WEATHER_TTL_SECONDS = 600   # 10 minutes — plenty for a farm dashboard
+FORECAST_TTL_SECONDS = 1800         # 30 minutes — forecasts change slowly
+
+
 class WeatherService:
     def __init__(self):
         self.api_key = os.getenv('OPENWEATHER_API_KEY', '')
         self.base_url = "http://api.openweathermap.org/data/2.5"
         print(f"🌤️ Weather Service initialized with API key: {self.api_key[:8]}...")
-    
-    def get_current_weather(self, lat=None, lng=None, city=None):
-        """Get current weather data with better error handling"""
+        # One farm, one location today — a single cache slot is enough. If
+        # multi-location support is added later, key these by (lat, lng, city).
+        self._current_cache = None
+        self._current_cache_time = None
+        self._forecast_cache = None
+        self._forecast_cache_time = None
+
+    def _cache_fresh(self, cache_time, ttl_seconds):
+        return cache_time is not None and (datetime.now() - cache_time) < timedelta(seconds=ttl_seconds)
+
+    def get_current_weather(self, lat=None, lng=None, city=None, force_refresh=False):
+        """Get current weather data with better error handling.
+        Cached for CURRENT_WEATHER_TTL_SECONDS — pass force_refresh=True to
+        bypass the cache (e.g. a user-triggered refresh button)."""
+        if not force_refresh and self._cache_fresh(self._current_cache_time, CURRENT_WEATHER_TTL_SECONDS):
+            return self._current_cache
+
         try:
             print("🌤️ Fetching weather data...")
             
@@ -60,6 +80,8 @@ class WeatherService:
                     print(f"❌ Error saving weather data: {db_error}")
                     database.session.rollback()
                 
+                self._current_cache = weather_info
+                self._current_cache_time = datetime.now()
                 return weather_info
             else:
                 error_msg = f"Weather API error: {response.status_code}"
@@ -129,8 +151,11 @@ class WeatherService:
         except:
             return False
 
-    def get_forecast(self):
-        """Get weather forecast - simplified version"""
+    def get_forecast(self, force_refresh=False):
+        """Get weather forecast - simplified version.
+        Cached for FORECAST_TTL_SECONDS; pass force_refresh=True to bypass."""
+        if not force_refresh and self._cache_fresh(self._forecast_cache_time, FORECAST_TTL_SECONDS):
+            return self._forecast_cache
         try:
             lat = -1.286389
             lng = 36.817223
@@ -148,7 +173,10 @@ class WeatherService:
                         'rainfall': item.get('rain', {}).get('3h', 0),
                         'description': item['weather'][0]['description']
                     })
-                return {'success': True, 'forecasts': forecasts}
+                result = {'success': True, 'forecasts': forecasts}
+                self._forecast_cache = result
+                self._forecast_cache_time = datetime.now()
+                return result
             return {'success': False, 'error': 'Forecast unavailable'}
         except Exception as e:
             return {'success': False, 'error': str(e)}

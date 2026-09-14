@@ -84,6 +84,18 @@ def update_profile():
                 }), 400
             
             user.username = data['username'].strip()
+
+        # Update phone/contact number if provided
+        if 'phone_number' in data:
+            user.phone_number = data['phone_number']
+
+        # Update profile picture if provided (client-resized base64 data URI,
+        # or null/empty string to remove it)
+        if 'profile_picture' in data:
+            picture = data['profile_picture']
+            if picture and len(picture) > 2_000_000:  # ~2MB base64 safety cap
+                return jsonify({'success': False, 'message': 'Image is too large — please use a smaller photo'}), 400
+            user.profile_picture = picture or None
         
         # Update password if provided
         if 'new_password' in data and 'current_password' in data:
@@ -124,7 +136,9 @@ def update_profile():
             'user': {
                 'id': user.user_id,
                 'username': user.username,
-                'email': user.email
+                'email': user.email,
+                'phone_number': user.phone_number,
+                'profile_picture': user.profile_picture
             }
         })
         

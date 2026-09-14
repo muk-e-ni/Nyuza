@@ -42,6 +42,56 @@ AUTO_DOSE_THRESHOLD = 0.90                          # only auto-act when very co
 DOSE_DURATION_MS = 1500
 DOSE_COOLDOWN_SECONDS = 6 * 3600                    # don't re-dose within 6 hours
 
+# Rule-based next-step guidance for every known model class. Deliberately
+# NOT routed through Ollama — recommendations already flagged as slow, and
+# with only 9 fixed classes across both models, a fast, reliable lookup
+# beats an LLM round-trip on every single manual analyze click.
+ADVICE = {
+    'common_rust': {
+        'summary': "Common Rust — a fungal disease causing reddish-brown pustules on leaves.",
+        'next_steps': "Apply a fungicide labeled for corn rust, avoid overhead irrigation that keeps leaves wet, and remove heavily infected leaves. Usually low yield impact unless severe before tasseling.",
+    },
+    'gray_leaf_spot': {
+        'summary': "Gray Leaf Spot — a fungal disease favored by humid, warm conditions.",
+        'next_steps': "Apply a foliar fungicide if caught before tasseling, and consider crop rotation away from corn next season. Managing old corn residue (tilling it under) reduces spread.",
+    },
+    'northern_leaf_blight': {
+        'summary': "Northern Leaf Blight — long, greyish-green cigar-shaped lesions on leaves.",
+        'next_steps': "Apply a fungicide if infection reaches upper leaves before grain fill. Resistant hybrids and crop rotation are the most effective long-term controls.",
+    },
+    'corn_borer': {
+        'summary': "Corn Borer — larvae tunnel into stalks and ears, weakening the plant.",
+        'next_steps': "Light infestations are often handled by the auto-dosing pump. For heavier infestations, consider a targeted insecticide and clear stalk debris after harvest to reduce overwintering larvae.",
+    },
+    'army_worm': {
+        'summary': "Armyworm — caterpillars that strip leaves rapidly, often in large numbers.",
+        'next_steps': "Act quickly and check neighboring zones for spread. Anything beyond light feeding usually needs an insecticide application — scout again at dawn or dusk when they're most active.",
+    },
+    'aphid': {
+        'summary': "Aphids — small sap-sucking insects that cluster on new growth and can spread plant viruses.",
+        'next_steps': "Light infestations often clear up with natural predators like ladybugs. For heavier clusters, an insecticidal soap or targeted insecticide is more reliable.",
+    },
+    'potosia_brevitarsis': {
+        'summary': "Flower Beetle (Potosia brevitarsis) — feeds on flowers and soft plant tissue.",
+        'next_steps': "Hand removal is usually enough for light presence. If numbers are high, a targeted insecticide applied in early morning works best.",
+    },
+    'healthy': {
+        'summary': "No disease symptoms detected on this leaf.",
+        'next_steps': "No action needed — keep up the current care routine.",
+    },
+    'no_pest': {
+        'summary': "No pest activity detected.",
+        'next_steps': "No action needed — continue routine monitoring.",
+    },
+}
+
+
+def get_advice(predicted_class):
+    return ADVICE.get(predicted_class, {
+        'summary': predicted_class.replace('_', ' ').title(),
+        'next_steps': "Monitor this zone closely and consider a manual inspection to confirm.",
+    })
+
 
 class VisionMonitoringService:
     def __init__(self, app=None):
@@ -167,7 +217,13 @@ class VisionMonitoringService:
         This is also the fix for models 'getting confused about which check
         to run': the frontend no longer has to pick disease vs. pest — both
         run, always, and the result tells you which (if either) found
-        something."""
+        something.
+
+        Each result also carries 'advice' (summary + next steps) and, when
+        saved, a 'reading_id' for the farmer-feedback/retraining loop. When
+        both models flag a problem in the same image, the higher-confidence
+        one is marked 'primary' so the frontend can present one clear
+        answer instead of two competing diagnoses."""
         results = []
 
         if disease_model_service.is_ready():
@@ -181,10 +237,23 @@ class VisionMonitoringService:
         if not results:
             return results
 
+        for result in results:
+            result['advice'] = get_advice(result['predicted_class'])
+
+        problems = [r for r in results if not r['is_negative']]
+        if problems:
+            top = max(problems, key=lambda r: r['confidence'])
+            for r in results:
+                r['primary'] = (r is top) if not r['is_negative'] else False
+        else:
+            for r in results:
+                r['primary'] = False
+
         if save:
             image_path = save_plant_image(image_bytes, user_id, "check")
             for result in results:
-                self._log_reading(user_id, zone_id, result, image_path)
+                reading = self._log_reading(user_id, zone_id, result, image_path)
+                result['reading_id'] = reading.reading_id
 
         return results
 
@@ -241,7 +310,7 @@ class VisionMonitoringService:
         for result in review_candidates:
             self._notify_farmer(user_id, result)
 
-    def _log_reading(self, user_id, zone_id, result, image_path):
+    def _log_reading(self, user_id, zone_id, result, image_path, dosed=False):
         reading = PlantHealthReading(
             user_id=user_id,
             zone_id=zone_id,
@@ -250,9 +319,11 @@ class VisionMonitoringService:
             is_healthy=result["is_negative"],
             image_path=image_path,
             model_version=result["model_version"],
+            dosed=dosed,
         )
         database.session.add(reading)
         database.session.commit()
+        return reading
 
     def _recently_dosed(self, user_id, within_seconds):
         """Have we auto-dosed recently, for ANY reason (disease or pest)?
@@ -302,6 +373,13 @@ class VisionMonitoringService:
 
         dose_success = sensor_service.trigger_dosing_pump(DOSE_DURATION_MS)
 
+        if dose_success:
+            reading_ids = [r["reading_id"] for r in candidates if r.get("reading_id")]
+            if reading_ids:
+                PlantHealthReading.query.filter(PlantHealthReading.reading_id.in_(reading_ids)).update(
+                    {'dosed': True}, synchronize_session=False
+                )
+
         recommendation = Recommendation(
             user_id=user_id,
             title="Auto-treated: " + ", ".join(r["predicted_class"].replace("_", " ").title() for r in candidates),
@@ -323,14 +401,14 @@ class VisionMonitoringService:
 
     def _notify_farmer(self, user_id, result):
         """Lower-confidence detection — flag it for the farmer instead of acting."""
+        advice = result.get('advice') or get_advice(result['predicted_class'])
         recommendation = Recommendation(
             user_id=user_id,
             title=f"Possible {result['predicted_class'].replace('_', ' ').title()} detected",
             description=(
                 f"Camera detected possible {result['predicted_class'].replace('_', ' ')} "
                 f"at {result['confidence']:.0%} confidence ({result['model_version']}) — "
-                f"below the auto-treatment threshold. Please review and confirm before "
-                f"any pesticide is applied."
+                f"below the auto-treatment threshold. {advice['next_steps']}"
             ),
             recommendation_type="alert",
             priority="medium",

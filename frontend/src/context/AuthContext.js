@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }) => {
   const updateUser = (userData) => {
     if(userData){
       localStorage.setItem('user', JSON.stringify(userData));
-
+      setCurrentUser(userData);
     }
   };
 

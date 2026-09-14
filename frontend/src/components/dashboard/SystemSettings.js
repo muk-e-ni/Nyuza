@@ -1,567 +1,399 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { systemAPI, zoneAPI, notificationAPI } from '../../services/api';
 import {
-  Settings as SettingsIcon,
-  WaterDrop as WaterDropIcon,
-  Map as MapIcon,
-  Notifications as NotificationsIcon,
-  SmartToy as SmartToyIcon,
-} from '@mui/icons-material';
+  Box,
+  Typography,
+  Stack,
+  Button,
+  Switch,
+  Slider,
+  TextField,
+  MenuItem,
+  Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  CircularProgress,
+  useMediaQuery,
+} from '@mui/material';
+import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
+import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded';
+import GridViewRoundedIcon from '@mui/icons-material/GridViewRounded';
+import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
+import MemoryRoundedIcon from '@mui/icons-material/MemoryRounded';
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
+import { nyuzaColors as c } from '../../Theme';
 
-const SystemSettings = () => {
-  const [settings, setSettings] = useState({});
+const CATEGORIES = [
+  { id: 'general', label: 'General Settings', icon: SettingsRoundedIcon },
+  { id: 'irrigation', label: 'Irrigation Configuration', icon: WaterDropRoundedIcon },
+  { id: 'zones', label: 'Zone Configuration', icon: GridViewRoundedIcon },
+  { id: 'alerts', label: 'Alerts & Notifications', icon: NotificationsRoundedIcon },
+  { id: 'ai', label: 'AI & ML Settings', icon: MemoryRoundedIcon },
+];
+
+const DEFAULT_SETTINGS = {
+  weatherApiKey: '',
+  dataRetention: 90,
+  theme: 'light',
+  typography: 'Roboto',
+  language: 'en',
+  timeFormat: '24',
+  defaultDuration: 10,
+  maxDailyWater: 1000,
+  minInterval: 4,
+  smartIrrigation: true,
+  weatherAdaptive: true,
+  soilMoistureThreshold: 45,
+  lowWaterAlert: 20,
+  sensorAlert: true,
+  irrigationTriggerAlert: true,
+  pesticideOrderAlert: true,
+  weatherWarningAlert: true,
+  aiModelVersion: '2.4.1',
+  learningMode: 'active',
+  confidenceThreshold: 75,
+  autoApply: false,
+  shareDataForImprovement: true,
+  lastUpdated: null,
+};
+
+const SystemSettings = ({ onNotification }) => {
+  const isMobile = useMediaQuery('(max-width:900px)');
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [zones, setZones] = useState([]);
-  const [activeTab, setActiveTab] = useState('general');
+  const [activeCategory, setActiveCategory] = useState('general');
+  const [expandedZoneId, setExpandedZoneId] = useState(null);
+  const [zoneDraft, setZoneDraft] = useState({});
   const [saving, setSaving] = useState(false);
-  const [notificationMethods, setNotificationMethods] = useState({
-    email: false,
-    sms: false,
-    push: false,
-    web: true
-  });
-  const [testingNotification, setTestingNotification] = useState(null);
+  const [savingZone, setSavingZone] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [notificationMethods, setNotificationMethods] = useState({ email: false, sms: false, push: false, web: true });
+  const [testing, setTesting] = useState(null);
+
+  const notify = (msg, type = 'info') => onNotification?.(msg, type);
+
+  const fetchAll = useCallback(async () => {
+    try {
+      const [settingsRes, zonesRes, prefsRes] = await Promise.all([
+        systemAPI.getSettings(),
+        systemAPI.getZones(),
+        notificationAPI.getNotificationPreferences().catch(() => ({ data: {} })),
+      ]);
+      setSettings(prev => ({ ...prev, ...(settingsRes?.data || {}) }));
+      const zonesData = zonesRes?.data?.zones || zonesRes?.data?.data || zonesRes?.data || [];
+      setZones(Array.isArray(zonesData) ? zonesData : []);
+      if (Array.isArray(zonesData) && zonesData.length > 0) setExpandedZoneId(zonesData[0].zone_id);
+      if (prefsRes?.data?.preferences?.notification_methods) setNotificationMethods(prefsRes.data.preferences.notification_methods);
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+      notify('Failed to load some settings', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   useEffect(() => {
-    fetchSystemData();
-    fetchNotificationPreferences();
-  }, []);
-
-  const fetchSystemData = async () => {
-    try {
-      const [settingsResponse, zonesResponse] = await Promise.all([
-        systemAPI.getSettings(),
-        systemAPI.getZones()
-      ]);
-      
-      const settingsData = settingsResponse?.data || settingsResponse || {};
-      const zonesData = zonesResponse?.data?.data || zonesResponse?.data || zonesResponse || [];
-      
-      setSettings(settingsData);
-      setZones(zonesData);
-    } catch (error) {
-      console.error('Error fetching system data:', error);
-    }
-  };
-
-  const fetchNotificationPreferences = async () => {
-    try {
-      const response = await notificationAPI.getNotificationPreferences();
-      const preferences = response.data || {};
-      
-      if (preferences.notification_methods) {
-        setNotificationMethods(preferences.notification_methods);
-      }
-    } catch (error) {
-      console.error('Error fetching notification preferences:', error);
-    }
-  };
-
-  const handleSettingChange = (key, value) => {
-    setSettings(prev => ({
-      ...prev,
-      [key]: value
-    }));
-  };
-
-  const handleNotificationMethodChange = async (method, enabled) => {
-    const updatedMethods = {
-      ...notificationMethods,
-      [method]: enabled
-    };
-    
-    setNotificationMethods(updatedMethods);
-
-    // Save preferences immediately
-    try {
-      await notificationAPI.updateNotificationPreferences({
-        notification_methods: updatedMethods
+    const zone = zones.find(z => z.zone_id === expandedZoneId);
+    if (zone) {
+      setZoneDraft({
+        zone_name: zone.zone_name || '',
+        crop_type: zone.crop_type || '',
+        soil_type: zone.soil_type || '',
+        area_sqm: zone.area_sqm ?? '',
       });
-    } catch (error) {
-      console.error('Error updating notification preferences:', error);
     }
-  };
+  }, [expandedZoneId, zones]);
 
-  const handleZoneChange = async (zoneId, field, value) => {
-    try {
-      setZones(prev => prev.map(zone => 
-        zone.zone_id === zoneId ? { ...zone, [field]: value } : zone
-      ));
+  const set = (key, value) => setSettings(prev => ({ ...prev, [key]: value }));
 
-      const zoneToUpdate = zones.find(zone => zone.zone_id === zoneId);
-      if (zoneToUpdate) {
-        const updateData = {
-          ...zoneToUpdate,
-          [field]: field === 'moisture_threshold' || field === 'water_requirement' 
-            ? parseInt(value) 
-            : field === 'is_active' 
-            ? value === 'true'
-            : value
-        };
-        
-        await zoneAPI.updateZone(zoneId, updateData);
-      }
-    } catch (error) {
-      console.error('Error updating zone:', error);
-      alert('Failed to update zone settings');
-      fetchSystemData();
-    }
-  };
-
-  const handleSaveSettings = async () => {
+  const handleSave = async () => {
     setSaving(true);
     try {
-      const settingsToSave = {
-        ...settings,
-        notificationMethods,
-        lastUpdated: new Date().toISOString()
-      };
-      
-      await systemAPI.updateSettings(settingsToSave);
-      alert('Settings saved successfully!');
-      applySettings(settingsToSave);
-      
+      await systemAPI.updateSettings({ ...settings, notificationMethods, lastUpdated: new Date().toISOString() });
+      notify('Settings saved successfully', 'success');
     } catch (error) {
-      console.error('Error saving settings:', error);
-      alert('Failed to save settings');
+      notify('Failed to save settings', 'error');
     } finally {
       setSaving(false);
     }
   };
 
-  const applySettings = (newSettings) => {
-    console.log('Applying new settings:', newSettings);
-    
-    if (newSettings.defaultDuration) {
-      console.log(`Setting default irrigation duration to ${newSettings.defaultDuration} minutes`);
-    }
-    
-    if (newSettings.maxDailyWater) {
-      console.log(`Setting maximum daily water usage to ${newSettings.maxDailyWater} liters`);
-    }
-    
-    if (newSettings.minInterval) {
-      console.log(`Setting minimum irrigation interval to ${newSettings.minInterval} hours`);
-    }
-    
-    if (newSettings.lowWaterAlert) {
-      console.log(`Setting low water alert threshold to ${newSettings.lowWaterAlert}%`);
-    }
-    
-    if (newSettings.confidenceThreshold) {
-      console.log(`Setting AI confidence threshold to ${newSettings.confidenceThreshold}%`);
-    }
-    
-    if (newSettings.notificationMethods) {
-      console.log('Notification methods updated:', newSettings.notificationMethods);
-    }
+  const handleResetCategory = () => {
+    if (!window.confirm('Reset this category to its default values?')) return;
+    setSettings(prev => ({ ...prev, ...DEFAULT_SETTINGS }));
+    notify('Reset to defaults — remember to save', 'info');
   };
 
-  const handleResetDefaults = async () => {
-    if (window.confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) {
-      try {
-        const defaultSettings = {
-          weatherApiKey: '',
-          dataRetention: 90,
-          defaultDuration: 10,
-          maxDailyWater: 1000,
-          minInterval: 4,
-          smartIrrigation: true,
-          lowWaterAlert: 20,
-          sensorAlert: true,
-          confidenceThreshold: 75,
-          learningMode: 'active',
-          autoApply: false,
-          notificationMethods: {
-            email: false,
-            sms: false,
-            push: false,
-            web: true
-          }
-        };
-        
-        await systemAPI.updateSettings(defaultSettings);
-        setSettings(defaultSettings);
-        setNotificationMethods(defaultSettings.notificationMethods);
-        
-        // Reset notification preferences
-        await notificationAPI.updateNotificationPreferences({
-          notification_methods: defaultSettings.notificationMethods
-        });
-        
-        alert('Settings reset to defaults successfully!');
-        
-      } catch (error) {
-        console.error('Error resetting settings:', error);
-        alert('Failed to reset settings');
-      }
-    }
-  };
-
-  const testNotification = async (type) => {
-    setTestingNotification(type);
+  const handleNotificationMethodChange = async (method, enabled) => {
+    const updated = { ...notificationMethods, [method]: enabled };
+    setNotificationMethods(updated);
     try {
-      const response = await notificationAPI.testNotification(type);
-      if (response.data.success) {
-        alert(`${type.charAt(0).toUpperCase() + type.slice(1)} test notification sent successfully!`);
-      } else {
-        alert(`Failed to send ${type} test notification: ${response.data.error}`);
-      }
+      await notificationAPI.updateNotificationPreferences({ notification_methods: updated });
     } catch (error) {
-      console.error(`Error testing ${type} notification:`, error);
-      alert(`Failed to test ${type} notification. Please check your configuration.`);
+      notify('Failed to update notification preferences', 'error');
+    }
+  };
+
+  const handleTestNotification = async (type) => {
+    setTesting(type);
+    try {
+      const res = await notificationAPI.testNotification(type);
+      notify(res.data?.success ? `${type.toUpperCase()} test sent` : `${type} test failed`, res.data?.success ? 'success' : 'error');
+    } catch (error) {
+      notify(`Failed to test ${type}`, 'error');
     } finally {
-      setTestingNotification(null);
+      setTesting(null);
     }
   };
 
-  const sendSystemAlert = async (alertType, details) => {
+  const handleSaveZone = async () => {
+    setSavingZone(true);
     try {
-      const response = await notificationAPI.sendSystemAlert({
-        alert_type: alertType,
-        details: details
-      });
-      
-      if (response.data.success) {
-        alert('System alert sent successfully!');
-      } else {
-        alert(`Failed to send system alert: ${response.data.error}`);
-      }
+      await zoneAPI.updateZone(expandedZoneId, zoneDraft);
+      setZones(prev => prev.map(z => (z.zone_id === expandedZoneId ? { ...z, ...zoneDraft } : z)));
+      notify('Zone updated successfully', 'success');
     } catch (error) {
-      console.error('Error sending system alert:', error);
-      alert('Failed to send system alert. Admin access required.');
+      notify('Failed to update zone — please try again', 'error');
+    } finally {
+      setSavingZone(false);
     }
   };
 
-  const tabs = [
-    { id: 'general', name: 'General Settings', icon: <SettingsIcon sx={{ fontSize: 18 }} /> },
-    { id: 'irrigation', name: 'Irrigation', icon: <WaterDropIcon sx={{ fontSize: 18 }} /> },
-    { id: 'zones', name: 'Zones', icon: <MapIcon sx={{ fontSize: 18 }} /> },
-    { id: 'alerts', name: 'Alerts & Notifications', icon: <NotificationsIcon sx={{ fontSize: 18 }} /> },
-    { id: 'ai', name: 'AI Settings', icon: <SmartToyIcon sx={{ fontSize: 18 }} /> }
-  ];
-  const renderTabContent = () => {
-     switch (activeTab) {
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+        <CircularProgress sx={{ color: c.primaryGreen }} />
+      </Box>
+    );
+  }
+
+  const categoryContent = (id) => {
+    switch (id) {
       case 'general':
         return (
-          <div className="settings-tab">
-            <h3>General System Settings</h3>
-            <div className="settings-group">
-              <div className="setting-item">
-                <label>System Name</label>
-                <input 
-                  type="text" 
-                  value="Smart Irrigation System"
-                  disabled
-                  className="disabled-input"
-                />
-                <small className="help-text">System name cannot be changed</small>
-              </div>
-              <div className="setting-item">
-                <label>Weather API Key</label>
-                <input 
-                  type="password" 
-                  value={settings.weatherApiKey || ''}
-                  onChange={(e) => handleSettingChange('weatherApiKey', e.target.value)}
-                  placeholder="Enter your weather API key"
-                />
-                <small className="help-text">Required for weather-based irrigation adjustments</small>
-              </div>
-              <div className="setting-item">
-                <label>Data Retention (Days)</label>
-                <input 
-                  type="number" 
-                  value={settings.dataRetention || 90}
-                  onChange={(e) => handleSettingChange('dataRetention', parseInt(e.target.value))}
-                  min="30"
-                  max="365"
-                />
-                <small className="help-text">How long to keep historical data</small>
-              </div>
-            </div>
-          </div>
+          <Stack divider={<Box sx={{ borderBottom: `1px solid ${c.border}` }} />} spacing={0}>
+            <SettingRow label="Application Theme" description="Switch between cosmetic modes of the farm operator interface.">
+              <SegmentedControl value={settings.theme} onChange={(v) => set('theme', v)} options={[['light', 'Light'], ['dark', 'Dark'], ['system', 'System']]} />
+            </SettingRow>
+            <SettingRow label="Typography Preference" description="Select the default primary typeface used across control metrics.">
+              <TextField select size="small" value={settings.typography} onChange={(e) => set('typography', e.target.value)} sx={{ minWidth: 200 }}>
+                <MenuItem value="Roboto">Roboto (Default)</MenuItem>
+                <MenuItem value="Inter">Inter</MenuItem>
+                <MenuItem value="System">System UI</MenuItem>
+              </TextField>
+            </SettingRow>
+            <SettingRow label="Language Selection" description="Changes the localized text for all charts, operations, and warnings.">
+              <TextField select size="small" value={settings.language} onChange={(e) => set('language', e.target.value)} sx={{ minWidth: 200 }}>
+                <MenuItem value="en">English (US)</MenuItem>
+                <MenuItem value="sw">Swahili</MenuItem>
+                <MenuItem value="fr">French</MenuItem>
+              </TextField>
+            </SettingRow>
+            <SettingRow label="Telemetry Data Retention" description="How long IoT sensor logs and moisture history are archived locally.">
+              <SliderRow value={settings.dataRetention} min={30} max={365} onChange={(v) => set('dataRetention', v)} format={(v) => (v >= 360 ? '1 Year' : `${v} days`)} />
+            </SettingRow>
+            <SettingRow label="Date / Time Standard" description="Format displayed across localized operations and irrigation logs.">
+              <SegmentedControl value={settings.timeFormat} onChange={(v) => set('timeFormat', v)} options={[['12', '12-hour'], ['24', '24-hour']]} />
+            </SettingRow>
+          </Stack>
         );
 
       case 'irrigation':
         return (
-          <div className="settings-tab">
-            <h3>Irrigation Settings</h3>
-            <div className="settings-group">
-              <div className="setting-item">
-                <label>Default Irrigation Duration (minutes)</label>
-                <input 
-                  type="number" 
-                  value={settings.defaultDuration || 10}
-                  onChange={(e) => handleSettingChange('defaultDuration', parseInt(e.target.value))}
-                  min="1"
-                  max="60"
-                />
-                <small className="help-text">Default time for manual irrigation</small>
-              </div>
-              <div className="setting-item">
-                <label>Maximum Daily Water Usage (liters)</label>
-                <input 
-                  type="number" 
-                  value={settings.maxDailyWater || 1000}
-                  onChange={(e) => handleSettingChange('maxDailyWater', parseInt(e.target.value))}
-                  min="100"
-                  max="5000"
-                />
-                <small className="help-text">Safety limit to prevent over-watering</small>
-              </div>
-              <div className="setting-item">
-                <label>Minimum Interval Between Irrigations (hours)</label>
-                <input 
-                  type="number" 
-                  value={settings.minInterval || 4}
-                  onChange={(e) => handleSettingChange('minInterval', parseInt(e.target.value))}
-                  min="1"
-                  max="24"
-                />
-                <small className="help-text">Prevent too frequent watering</small>
-              </div>
-              <div className="setting-item">
-                <label>Enable Smart Irrigation</label>
-                <select 
-                  value={settings.smartIrrigation !== false}
-                  onChange={(e) => handleSettingChange('smartIrrigation', e.target.value === 'true')}
-                >
-                  <option value={true}>Enabled</option>
-                  <option value={false}>Disabled</option>
-                </select>
-                <small className="help-text">Use AI and sensor data for automatic irrigation</small>
-              </div>
-            </div>
-          </div>
+          <Stack divider={<Box sx={{ borderBottom: `1px solid ${c.border}` }} />} spacing={0}>
+            <SettingRow label="Default Irrigation Duration" description="Default operating timeframe for newly triggered general cycles.">
+              <NumberField value={settings.defaultDuration} onChange={(v) => set('defaultDuration', v)} suffix="minutes" min={1} max={60} />
+            </SettingRow>
+            <SettingRow label="Maximum Daily Water Usage" description="A safety cap to alert management and stop triggers when threshold is breached.">
+              <NumberField value={settings.maxDailyWater} onChange={(v) => set('maxDailyWater', v)} suffix="Liters" min={100} max={5000} />
+            </SettingRow>
+            <SettingRow label="Minimum Interval Between Irrigations" description="Resting period between zone active states to avoid root drowning.">
+              <NumberField value={settings.minInterval} onChange={(v) => set('minInterval', v)} suffix="hours" min={1} max={24} />
+            </SettingRow>
+            <SettingRow label="Enable Smart Irrigation" description="Allow the system to automatically trigger and adjust irrigation based on sensor data and weather forecasts.">
+              <ToggleSwitch checked={settings.smartIrrigation} onChange={(v) => set('smartIrrigation', v)} />
+            </SettingRow>
+            {settings.smartIrrigation && (
+              <Box sx={{ bgcolor: c.background, borderRadius: 3, p: 2, ml: { md: 2 } }}>
+                <Stack divider={<Box sx={{ borderBottom: `1px solid ${c.border}` }} />} spacing={0}>
+                  <SettingRow label="Weather-Adaptive Mode" description="Automatically skip scheduled watering days if precipitation is imminent.">
+                    <ToggleSwitch checked={settings.weatherAdaptive} onChange={(v) => set('weatherAdaptive', v)} />
+                  </SettingRow>
+                  <SettingRow label="Soil Moisture Threshold" description="Target baseline limit to start auto-irrigation.">
+                    <SliderRow value={settings.soilMoistureThreshold} min={10} max={80} onChange={(v) => set('soilMoistureThreshold', v)} format={(v) => `${v}%`} />
+                  </SettingRow>
+                </Stack>
+              </Box>
+            )}
+          </Stack>
         );
 
-      case 'zones':
+      case 'zones': {
         return (
-          <div className="settings-tab">
-            <h3>Zone Management</h3>
-            <div className="zones-list">
-              {zones.length > 0 ? (
-                zones.map(zone => (
-                  <div key={zone.zone_id} className="zone-setting">
-                    <h4>{zone.zone_name}</h4>
-                    <div className="zone-settings-grid">
-                      <div className="setting-item">
-                        <label>Moisture Threshold (%)</label>
-                        <input 
-                          type="number" 
-                          value={zone.moisture_threshold || 30}
-                          onChange={(e) => handleZoneChange(zone.zone_id, 'moisture_threshold', e.target.value)}
-                          min="10"
-                          max="80"
+          <Stack spacing={2}>
+            {zones.length === 0 && (
+              <Typography variant="body2" sx={{ color: c.textMuted }}>No zones configured yet.</Typography>
+            )}
+            {zones.map(zone => {
+              const isOpen = zone.zone_id === expandedZoneId;
+              return (
+                <Box key={zone.zone_id} sx={{ border: `1px solid ${c.border}`, borderRadius: 3, p: 2.5 }}>
+                  {isOpen ? (
+                    <Stack spacing={2}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                        <Box>
+                          <Typography variant="caption" sx={{ color: c.textMuted, fontWeight: 700, textTransform: 'uppercase' }}>
+                            Editing: {zone.zone_name}
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: c.textBody }}>Zone parameters</Typography>
+                        </Box>
+                        <Chip
+                          label={zone.is_active !== false ? 'Active State' : 'Inactive'}
+                          size="small"
+                          sx={{ bgcolor: zone.is_active !== false ? c.chipGreenBg : c.dangerBg, color: zone.is_active !== false ? c.primaryGreen : c.danger, fontWeight: 700 }}
                         />
-                        <small className="help-text">Trigger irrigation below this level</small>
-                      </div>
-                      <div className="setting-item">
-                        <label>Water Requirement (L/day)</label>
-                        <input 
-                          type="number" 
-                          value={zone.water_requirement || 25}
-                          onChange={(e) => handleZoneChange(zone.zone_id, 'water_requirement', e.target.value)}
-                          min="5"
-                          max="200"
-                        />
-                        <small className="help-text">Estimated daily water needs</small>
-                      </div>
-                      <div className="setting-item">
-                        <label>Zone Active</label>
-                        <select 
-                          value={zone.is_active !== false}
-                          onChange={(e) => handleZoneChange(zone.zone_id, 'is_active', e.target.value === 'true')}
-                        >
-                          <option value={true}>Active</option>
-                          <option value={false}>Inactive</option>
-                        </select>
-                        <small className="help-text">Enable/disable this zone</small>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="no-zones">No zones configured</div>
-              )}
-            </div>
-          </div>
+                      </Stack>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                        <TextField label="Zone Name" size="small" value={zoneDraft.zone_name || ''} onChange={(e) => setZoneDraft(p => ({ ...p, zone_name: e.target.value }))} sx={{ flex: '1 1 160px' }} />
+                        <TextField label="Crop / Plant Type" size="small" value={zoneDraft.crop_type || ''} onChange={(e) => setZoneDraft(p => ({ ...p, crop_type: e.target.value }))} sx={{ flex: '1 1 160px' }} />
+                        <TextField label="Soil Type" size="small" value={zoneDraft.soil_type || ''} onChange={(e) => setZoneDraft(p => ({ ...p, soil_type: e.target.value }))} sx={{ flex: '1 1 160px' }} />
+                        <TextField label="Area (m²)" size="small" type="number" value={zoneDraft.area_sqm ?? ''} onChange={(e) => setZoneDraft(p => ({ ...p, area_sqm: e.target.value }))} sx={{ flex: '1 1 120px' }} />
+                      </Box>
+                      <Stack direction="row" spacing={1} justifyContent="flex-end">
+                        <Button size="small" onClick={() => setExpandedZoneId(null)} sx={{ color: c.textBody }}>Cancel</Button>
+                        <Button size="small" variant="contained" disabled={savingZone} onClick={handleSaveZone} sx={{ bgcolor: c.sidebarActive, '&:hover': { bgcolor: '#152018' } }}>
+                          {savingZone ? 'Saving...' : 'Save Changes'}
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  ) : (
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark }}>
+                          {zone.zone_name} {zone.area_sqm ? `· ${zone.area_sqm} m²` : ''}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: c.textMuted }}>
+                          {zone.crop_type || 'No crop set'} · {zone.soil_type || 'No soil set'}
+                        </Typography>
+                      </Box>
+                      <Button size="small" variant="outlined" onClick={() => setExpandedZoneId(zone.zone_id)} sx={{ borderColor: c.border, color: c.textDark }}>
+                        Edit
+                      </Button>
+                    </Stack>
+                  )}
+                </Box>
+              );
+            })}
+          </Stack>
         );
-      
+      }
+
       case 'alerts':
         return (
-          <div className="settings-tab">
-            <h3>Alert & Notification Settings</h3>
-            <div className="settings-group">
-              <div className="setting-item">
-                <label>Low Water Level Alert (%)</label>
-                <input 
-                  type="number" 
-                  value={settings.lowWaterAlert || 20}
-                  onChange={(e) => handleSettingChange('lowWaterAlert', parseInt(e.target.value))}
-                  min="5"
-                  max="50"
-                />
-                <small className="help-text">Alert when water tank level drops below this percentage</small>
-              </div>
-              <div className="setting-item">
-                <label>Sensor Failure Alert</label>
-                <select 
-                  value={settings.sensorAlert !== false}
-                  onChange={(e) => handleSettingChange('sensorAlert', e.target.value === 'true')}
-                >
-                  <option value={true}>Enabled</option>
-                  <option value={false}>Disabled</option>
-                </select>
-                <small className="help-text">Receive alerts when sensors stop reporting</small>
-              </div>
-              
-              <div className="notification-methods">
-                <h4>Notification Methods</h4>
-                <div className="notification-options">
-                  <div className="notification-option">
-                    <label>
-                      <input 
-                        type="checkbox"
-                        checked={notificationMethods.web}
-                        onChange={(e) => handleNotificationMethodChange('web', e.target.checked)}
-                      />
-                      Web Dashboard
-                    </label>
-                    <small>Always enabled for critical alerts</small>
-                  </div>
-                  <div className="notification-option">
-                    <label>
-                      <input 
-                        type="checkbox"
-                        checked={notificationMethods.email}
-                        onChange={(e) => handleNotificationMethodChange('email', e.target.checked)}
-                      />
-                      Email Notifications
-                    </label>
-                    <button 
-                      className="test-btn"
-                      onClick={() => testNotification('email')}
-                      disabled={!notificationMethods.email || testingNotification === 'email'}
-                    >
-                      {testingNotification === 'email' ? 'Testing...' : 'Test'}
-                    </button>
-                  </div>
-                  <div className="notification-option">
-                    <label>
-                      <input 
-                        type="checkbox"
-                        checked={notificationMethods.sms}
-                        onChange={(e) => handleNotificationMethodChange('sms', e.target.checked)}
-                      />
-                      SMS Notifications
-                    </label>
-                    <button 
-                      className="test-btn"
-                      onClick={() => testNotification('sms')}
-                      disabled={!notificationMethods.sms || testingNotification === 'sms'}
-                    >
-                      {testingNotification === 'sms' ? 'Testing...' : 'Test'}
-                    </button>
-                  </div>
-                  <div className="notification-option">
-                    <label>
-                      <input 
-                        type="checkbox"
-                        checked={notificationMethods.push}
-                        onChange={(e) => handleNotificationMethodChange('push', e.target.checked)}
-                      />
-                      Push Notifications
-                    </label>
-                    <button 
-                      className="test-btn"
-                      onClick={() => testNotification('push')}
-                      disabled={!notificationMethods.push || testingNotification === 'push'}
-                    >
-                      {testingNotification === 'push' ? 'Testing...' : 'Test'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Admin-only system alert testing */}
-              <div className="system-alerts">
-                <h4>System Alert Testing (Admin Only)</h4>
-                <div className="alert-test-buttons">
-                  <button 
-                    className="btn-warning"
-                    onClick={() => sendSystemAlert('low_water', '15%')}
-                  >
-                    Test Low Water Alert
-                  </button>
-                  <button 
-                    className="btn-warning"
-                    onClick={() => sendSystemAlert('sensor_failure', 'Zone 1 Moisture Sensor')}
-                  >
-                    Test Sensor Failure
-                  </button>
-                  <button 
-                    className="btn-warning"
-                    onClick={() => sendSystemAlert('moisture_low', '18%')}
-                  >
-                    Test Low Moisture
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+          <Stack spacing={4}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: c.textDark, mb: 1 }}>Notification Channels</Typography>
+              <Stack divider={<Box sx={{ borderBottom: `1px solid ${c.border}` }} />} spacing={0}>
+                <SettingRow label="SMS Alerts" description="Send automated texts for critical, high-importance operational alerts.">
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <ToggleSwitch checked={notificationMethods.sms} onChange={(v) => handleNotificationMethodChange('sms', v)} />
+                    <Button size="small" disabled={!notificationMethods.sms || testing === 'sms'} onClick={() => handleTestNotification('sms')} sx={{ color: c.primaryGreen, minWidth: 0 }}>
+                      {testing === 'sms' ? '...' : 'Test'}
+                    </Button>
+                  </Stack>
+                </SettingRow>
+                <SettingRow label="Email Notifications" description="Receive general summaries and system reports.">
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <ToggleSwitch checked={notificationMethods.email} onChange={(v) => handleNotificationMethodChange('email', v)} />
+                    <Button size="small" disabled={!notificationMethods.email || testing === 'email'} onClick={() => handleTestNotification('email')} sx={{ color: c.primaryGreen, minWidth: 0 }}>
+                      {testing === 'email' ? '...' : 'Test'}
+                    </Button>
+                  </Stack>
+                </SettingRow>
+                <SettingRow label="Push Notifications" description="Allow instant mobile app warnings.">
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <ToggleSwitch checked={notificationMethods.push} onChange={(v) => handleNotificationMethodChange('push', v)} />
+                    <Button size="small" disabled={!notificationMethods.push || testing === 'push'} onClick={() => handleTestNotification('push')} sx={{ color: c.primaryGreen, minWidth: 0 }}>
+                      {testing === 'push' ? '...' : 'Test'}
+                    </Button>
+                  </Stack>
+                </SettingRow>
+              </Stack>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: c.textDark, mb: 1 }}>Alert Types</Typography>
+              <Stack divider={<Box sx={{ borderBottom: `1px solid ${c.border}` }} />} spacing={0}>
+                <SettingRow label="Low Water Level Alert" description="Alert threshold for reservoir capacities before emergency block actions.">
+                  <NumberField value={settings.lowWaterAlert} onChange={(v) => set('lowWaterAlert', v)} suffix="%" min={5} max={50} />
+                </SettingRow>
+                <SettingRow label="Irrigation Trigger Alert" description="Receive pings when cycles start or end on ground blocks.">
+                  <ToggleSwitch checked={settings.irrigationTriggerAlert} onChange={(v) => set('irrigationTriggerAlert', v)} />
+                </SettingRow>
+                <SettingRow label="Pesticide Order Confirmation Alert" description="Trigger a notification once orders are confirmed by suppliers.">
+                  <ToggleSwitch checked={settings.pesticideOrderAlert} onChange={(v) => set('pesticideOrderAlert', v)} />
+                </SettingRow>
+                <SettingRow label="Sensor Failure Alert" description="Urgent ping when IoT soil moisture telemetry drops or disconnects.">
+                  <ToggleSwitch checked={settings.sensorAlert} onChange={(v) => set('sensorAlert', v)} />
+                </SettingRow>
+                <SettingRow label="Weather Warning Alert" description="Severe thunderstorm or freeze predictions affecting crop fields.">
+                  <ToggleSwitch checked={settings.weatherWarningAlert} onChange={(v) => set('weatherWarningAlert', v)} />
+                </SettingRow>
+              </Stack>
+            </Box>
+          </Stack>
         );
 
-          case 'ai':
+      case 'ai':
         return (
-          <div className="settings-tab">
-            <h3>AI & Machine Learning</h3>
-            <div className="settings-group">
-              <div className="setting-item">
-                <label>AI Model Version</label>
-                <input 
-                  type="text" 
-                  value={settings.aiModelVersion || '1.0'}
-                  disabled
-                  className="disabled-input"
-                />
-                <small className="help-text">Current AI model version</small>
-              </div>
-              <div className="setting-item">
-                <label>Learning Mode</label>
-                <select 
-                  value={settings.learningMode || 'active'}
-                  onChange={(e) => handleSettingChange('learningMode', e.target.value)}
-                >
-                  <option value="active">Active Learning</option>
-                  <option value="passive">Passive Learning</option>
-                  <option value="disabled">Disabled</option>
-                </select>
-                <small className="help-text">Active learning adapts to your patterns</small>
-              </div>
-              <div className="setting-item">
-                <label>Recommendation Confidence Threshold (%)</label>
-                <input 
-                  type="number" 
-                  value={settings.confidenceThreshold || 75}
-                  onChange={(e) => handleSettingChange('confidenceThreshold', parseInt(e.target.value))}
-                  min="50"
-                  max="95"
-                />
-                <small className="help-text">Only show recommendations above this confidence level</small>
-              </div>
-              <div className="setting-item">
-                <label>Auto-apply High Confidence Recommendations</label>
-                <select 
-                  value={settings.autoApply || false}
-                  onChange={(e) => handleSettingChange('autoApply', e.target.value === 'true')}
-                >
-                  <option value={true}>Enabled</option>
-                  <option value={false}>Disabled</option>
-                </select>
-                <small className="help-text">Automatically apply recommendations with 90%+ confidence</small>
-              </div>
-            </div>
-          </div>
+          <Stack divider={<Box sx={{ borderBottom: `1px solid ${c.border}` }} />} spacing={0}>
+            <SettingRow label="Algorithm Version" description="Current running model version details.">
+              <Chip label={`v${settings.aiModelVersion} (Latest) ✓`} size="small" sx={{ bgcolor: c.chipGreenBg, color: c.primaryGreen, fontWeight: 700 }} />
+            </SettingRow>
+            <Box sx={{ py: 2.5 }}>
+              <Typography sx={{ fontWeight: 700, color: c.textDark, mb: 1.5 }}>Learning Mode Selector</Typography>
+              <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                {[
+                  { id: 'passive', label: 'Passive', desc: 'Collects data silently. No smart action alerts are served.' },
+                  { id: 'active', label: 'Active Mode', desc: 'Full triggers active. Serves real-time irrigation advice.', tag: 'Recommended' },
+                  { id: 'disabled', label: 'Disabled', desc: 'Disconnects pipeline triggers. Pure scheduling logic fallback.' },
+                ].map(mode => (
+                  <Box
+                    key={mode.id}
+                    onClick={() => set('learningMode', mode.id)}
+                    sx={{
+                      flex: '1 1 200px', cursor: 'pointer', borderRadius: 3, p: 2,
+                      border: `2px solid ${settings.learningMode === mode.id ? c.primaryGreen : c.border}`,
+                      bgcolor: settings.learningMode === mode.id ? c.chipGreenBg : 'white',
+                    }}
+                  >
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                      <Typography sx={{ fontWeight: 700, color: c.textDark, fontSize: 14 }}>{mode.label}</Typography>
+                      {mode.tag && <Chip label={mode.tag} size="small" sx={{ bgcolor: c.primaryGreen, color: 'white', fontWeight: 700, height: 18, fontSize: 10 }} />}
+                    </Stack>
+                    <Typography variant="body2" sx={{ color: c.textBody, fontSize: 12.5 }}>{mode.desc}</Typography>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+            <SettingRow label="Recommendation Confidence Threshold" description="Define the minimum probability certainty required to suggest field tasks.">
+              <SliderRow value={settings.confidenceThreshold} min={50} max={95} onChange={(v) => set('confidenceThreshold', v)} format={(v) => `${v}%`} />
+            </SettingRow>
+            <SettingRow label="Automatically apply high-confidence recommendations" description="Recommendations above the confidence threshold will be applied without manual review.">
+              <ToggleSwitch checked={settings.autoApply} onChange={(v) => set('autoApply', v)} />
+            </SettingRow>
+            <SettingRow label="Include my farm data in model improvement" description="Securely and anonymously upload telemetry variables to enhance Nyuza core models.">
+              <ToggleSwitch checked={settings.shareDataForImprovement} onChange={(v) => set('shareDataForImprovement', v)} />
+            </SettingRow>
+            <Stack direction="row" justifyContent="space-between" sx={{ py: 2 }}>
+              <Typography variant="body2" sx={{ color: c.textBody }}>Last Model Update</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark }}>
+                {settings.lastUpdated ? new Date(settings.lastUpdated).toLocaleString() : 'Not yet updated'}
+              </Typography>
+            </Stack>
+          </Stack>
         );
 
       default:
@@ -569,46 +401,146 @@ const SystemSettings = () => {
     }
   };
 
-  return (
-    <div className="system-settings">
-      <h2>System Settings</h2>
-      
-      <div className="settings-layout">
-        <div className="settings-tabs">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              <span className="tab-icon">{tab.icon}</span>
-              <span className="tab-name">{tab.name}</span>
-            </button>
-          ))}
-        </div>
+  const currentCategory = CATEGORIES.find(cat => cat.id === activeCategory);
 
-        <div className="settings-content">
-          {renderTabContent()}
-          
-          <div className="settings-actions">
-            <button 
-              className="btn-primary"
-              onClick={handleSaveSettings}
-              disabled={saving}
-            >
-              {saving ? 'Saving...' : 'Save Settings'}
-            </button>
-            <button 
-              className="btn-secondary"
-              onClick={handleResetDefaults}
-            >
-              Reset to Defaults
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
+  const footer = (
+    <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mt: 3 }}>
+      <Button variant="outlined" onClick={handleResetCategory} sx={{ borderColor: c.border, color: c.textBody }}>
+        Reset to Defaults
+      </Button>
+      <Button variant="contained" disabled={saving} onClick={handleSave} sx={{ bgcolor: c.sidebarActive, '&:hover': { bgcolor: '#152018' } }}>
+        {saving ? 'Saving...' : 'Save Settings'}
+      </Button>
+    </Stack>
+  );
+
+  if (isMobile) {
+    return (
+      <Box>
+        {CATEGORIES.map(cat => (
+          <Accordion
+            key={cat.id}
+            expanded={activeCategory === cat.id}
+            onChange={() => setActiveCategory(activeCategory === cat.id ? '' : cat.id)}
+            sx={{ mb: 1.5, borderRadius: 3, border: `1px solid ${c.border}`, boxShadow: 'none', '&:before': { display: 'none' } }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreRoundedIcon />}>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                <cat.icon sx={{ fontSize: 18, color: c.textDark }} />
+                <Typography sx={{ fontWeight: 700, color: c.textDark }}>{cat.label}</Typography>
+              </Stack>
+            </AccordionSummary>
+            <AccordionDetails>{categoryContent(cat.id)}</AccordionDetails>
+          </Accordion>
+        ))}
+        {footer}
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ display: 'flex', gap: 3, alignItems: 'flex-start' }}>
+      <Box sx={{ width: 280, flexShrink: 0, bgcolor: 'white', border: `1px solid ${c.border}`, borderRadius: 4, p: 1.5 }}>
+        <Stack spacing={0.5}>
+          {CATEGORIES.map(cat => {
+            const active = activeCategory === cat.id;
+            return (
+              <Button
+                key={cat.id}
+                fullWidth
+                onClick={() => setActiveCategory(cat.id)}
+                startIcon={<cat.icon sx={{ fontSize: 18 }} />}
+                sx={{
+                  justifyContent: 'flex-start', px: 2, py: 1.3, borderRadius: 2, fontSize: 14,
+                  bgcolor: active ? c.chipGreenBg : 'transparent',
+                  color: active ? c.primaryGreen : c.textBody,
+                  fontWeight: active ? 700 : 500,
+                  '&:hover': { bgcolor: c.chipGreenBg },
+                }}
+              >
+                {cat.label}
+              </Button>
+            );
+          })}
+        </Stack>
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0, bgcolor: 'white', border: `1px solid ${c.border}`, borderRadius: 4, p: 3.5 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700, color: c.textDark, mb: 3 }}>
+          {currentCategory?.label}
+        </Typography>
+        {categoryContent(activeCategory)}
+        {footer}
+      </Box>
+    </Box>
   );
 };
+
+// ---- shared field primitives ----
+
+const SettingRow = ({ label, description, children }) => (
+  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, py: 2.5, justifyContent: 'space-between', alignItems: 'center' }}>
+    <Box sx={{ flex: '1 1 280px', minWidth: 0 }}>
+      <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark }}>{label}</Typography>
+      {description && <Typography variant="body2" sx={{ color: c.textMuted, mt: 0.3 }}>{description}</Typography>}
+    </Box>
+    <Box sx={{ flexShrink: 0 }}>{children}</Box>
+  </Box>
+);
+
+const ToggleSwitch = ({ checked, onChange }) => (
+  <Switch
+    checked={!!checked}
+    onChange={(e) => onChange(e.target.checked)}
+    sx={{ '& .MuiSwitch-track': { bgcolor: c.border }, '& .Mui-checked+.MuiSwitch-track': { bgcolor: `${c.primaryGreen} !important` } }}
+  />
+);
+
+const NumberField = ({ value, onChange, suffix, min, max }) => (
+  <TextField
+    size="small"
+    type="number"
+    value={value}
+    onChange={(e) => onChange(Number(e.target.value))}
+    inputProps={{ min, max }}
+    InputProps={{ endAdornment: suffix ? <Typography variant="caption" sx={{ color: c.textMuted, ml: 1 }}>{suffix}</Typography> : undefined }}
+    sx={{ width: 160 }}
+  />
+);
+
+const SliderRow = ({ value, min, max, onChange, format }) => (
+  <Stack direction="row" spacing={2} alignItems="center" sx={{ width: 260 }}>
+    <Slider
+      value={value}
+      min={min}
+      max={max}
+      onChange={(_, v) => onChange(v)}
+      sx={{ color: c.primaryGreen, flex: 1 }}
+    />
+    <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark, minWidth: 56, textAlign: 'right' }}>
+      {format ? format(value) : value}
+    </Typography>
+  </Stack>
+);
+
+const SegmentedControl = ({ value, onChange, options }) => (
+  <Box sx={{ display: 'inline-flex', bgcolor: c.chipGreenBg, borderRadius: 2.5, p: 0.4 }}>
+    {options.map(([id, label]) => (
+      <Button
+        key={id}
+        onClick={() => onChange(id)}
+        size="small"
+        sx={{
+          px: 2, borderRadius: 2, fontWeight: 700, fontSize: 13,
+          bgcolor: value === id ? 'white' : 'transparent',
+          color: value === id ? c.textDark : c.textMuted,
+          boxShadow: value === id ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+          '&:hover': { bgcolor: value === id ? 'white' : 'transparent' },
+        }}
+      >
+        {label}
+      </Button>
+    ))}
+  </Box>
+);
 
 export default SystemSettings;

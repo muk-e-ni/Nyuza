@@ -1,17 +1,17 @@
 import json
 from datetime import datetime, timedelta
 from models import IrrigationLog, IrrigationZone, MoistureReading, Recommendation, database
-from services.ollama_service import ollama_service
+from services.genai_service import genai_service
 from services.weather_service import weather_service
 
 class AIRecommendationEngine:
     def __init__(self):
-        self.ollama_service = ollama_service
-        # In-memory cache for Ollama-backed results: serve the last generated
+        self.ollama_service = genai_service  # kept the attribute name for now — many call sites below still say self.ollama_service, but it's Gemini-backed as of this change
+        # In-memory cache for AI-backed results: serve the last generated
         # result indefinitely per cache key, until the caller explicitly asks
         # for force_refresh=True. This is what "click refresh if you want a
         # new one" maps to — no TTL, no background regeneration, just: don't
-        # call Ollama again unless asked. Resets on server restart, which is
+        # call the AI again unless asked. Resets on server restart, which is
         # fine for this use case.
         self._result_cache = {}
 

@@ -19,3 +19,4 @@ Pillow
 pyserial
 twilio
 opencv-python
+google-genai

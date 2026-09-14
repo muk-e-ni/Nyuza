@@ -41,6 +41,17 @@ import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import NotificationsRoundedIcon from '@mui/icons-material/NotificationsRounded';
 import EnergySavingsLeafRoundedIcon from '@mui/icons-material/EnergySavingsLeafRounded';
 
+import DoneRoundedIcon from '@mui/icons-material/DoneRounded';
+import ClearRoundedIcon from '@mui/icons-material/ClearRounded';
+import DeleteSweepRoundedIcon from '@mui/icons-material/DeleteSweepRounded';
+import NotificationsNoneRoundedIcon from '@mui/icons-material/NotificationsNoneRounded';
+import {
+  Popover,
+  List,
+  ListItemButton,
+  Divider,
+} from '@mui/material';
+
 // Notification System Components
 const Notification = ({ message, type, onClose }) => {
   useEffect(() => {
@@ -52,153 +63,124 @@ const Notification = ({ message, type, onClose }) => {
   }, [onClose]);
 
   return (
-    <div className={`notification notification-${type}`}>
-      <div className="notification-content">
-        <span className="notification-icon">
-          {type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️'}
-        </span>
-        <span className="notification-message">{message}</span>
-      </div>
-      <button className="notification-close" onClick={onClose}>×</button>
-    </div>
+    <Alert
+      severity={type === 'success' || type === 'error' ? type : 'info'}
+      onClose={onClose}
+      variant="filled"
+      sx={{ boxShadow: '0 4px 16px rgba(0,0,0,0.15)', minWidth: 280, alignItems: 'center' }}
+    >
+      {message}
+    </Alert>
   );
 };
 
 const NotificationCenter = ({ notifications, onClearAll, onRemoveNotification, onMarkAllAsRead, onMarkAsRead }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [expandedNotification, setExpandedNotification] = useState(null);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
   const unreadCount = notifications.filter(n => !n.read).length;
+  const isOpen = Boolean(anchorEl);
 
   const handleNotificationClick = (notification) => {
-    if (!notification.read) {
-      onMarkAsRead(notification.id);
-    }
-    
-    // Toggle expanded view for the notification
-    if (expandedNotification === notification.id) {
-      setExpandedNotification(null);
-    } else {
-      setExpandedNotification(notification.id);
-    }
+    if (!notification.read) onMarkAsRead(notification.id);
+    setExpandedId(expandedId === notification.id ? null : notification.id);
   };
 
-  const handleCloseNotification = (e, notificationId) => {
-    e.stopPropagation(); // Prevent triggering the click event
-    onRemoveNotification(notificationId);
-    if (expandedNotification === notificationId) {
-      setExpandedNotification(null);
-    }
+  const handleClose = () => {
+    setAnchorEl(null);
+    setExpandedId(null);
   };
 
-  const closeNotificationPanel = () => {
-    setIsOpen(false);
-    setExpandedNotification(null);
-  };
+  const typeColor = (type) => (type === 'success' ? c.primaryGreen : type === 'error' ? c.danger : c.textMuted);
 
   return (
-    <div className="notification-center">
+    <>
       <Badge
         badgeContent={unreadCount}
         color="error"
         overlap="circular"
-        sx={{
-          '& .MuiBadge-badge': {
-            fontSize: '11px',
-            height: '18px',
-            minWidth: '18px',
-          }
-        }}
+        sx={{ '& .MuiBadge-badge': { fontSize: '11px', height: '18px', minWidth: '18px' } }}
       >
         <IconButton
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={(e) => setAnchorEl(e.currentTarget)}
           sx={{ bgcolor: 'white', border: `1px solid ${c.border}`, width: 36, height: 36 }}
         >
           <NotificationsRoundedIcon sx={{ fontSize: 18, color: c.textDark }} />
         </IconButton>
       </Badge>
 
-      {isOpen && (
-        <div className="notification-panel">
-          <div className="notification-panel-header">
-            <div className="notification-panel-title">
-              <h3>Notifications</h3>
-              {unreadCount > 0 && (
-                <span className="unread-badge">{unreadCount} unread</span>
-              )}
-            </div>
-            <div className="notification-panel-actions">
-              <button 
-                className="close-panel-btn"
-                onClick={closeNotificationPanel}
-                title="Close notifications"
-              >
-                ×
-              </button>
-            </div>
-          </div>
-          
-          <div className="notification-panel-controls">
+      <Popover
+        open={isOpen}
+        anchorEl={anchorEl}
+        onClose={handleClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        PaperProps={{ sx: { width: 360, maxHeight: 460, borderRadius: 3, mt: 1, border: `1px solid ${c.border}`, boxShadow: '0 8px 32px rgba(0,0,0,0.12)' } }}
+      >
+        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 2, py: 1.5 }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography sx={{ fontWeight: 700, color: c.textDark }}>Notifications</Typography>
             {unreadCount > 0 && (
-              <button className="mark-read-btn" onClick={onMarkAllAsRead}>
-                Mark all as read
-              </button>
+              <Box sx={{ bgcolor: c.chipGreenBg, color: c.primaryGreen, fontSize: 11, fontWeight: 700, px: 1, py: 0.2, borderRadius: 5 }}>
+                {unreadCount} unread
+              </Box>
             )}
-            {notifications.length > 0 && (
-              <button className="clear-all-btn" onClick={onClearAll}>
-                Clear All
-              </button>
-            )}
-          </div>
-          
-          <div className="notification-list">
-            {notifications.length === 0 ? (
-              <div className="no-notifications">
-                <div className="no-notifications-icon">🔔</div>
-                <p>No notifications yet</p>
-                <small>System notifications will appear here</small>
-              </div>
-            ) : (
-              notifications.map(notification => (
-                <div 
-                  key={notification.id} 
-                  className={`notification-item notification-${notification.type} ${!notification.read ? 'unread' : ''} ${expandedNotification === notification.id ? 'expanded' : ''}`}
+          </Stack>
+        </Stack>
+        {notifications.length > 0 && (
+          <>
+            <Stack direction="row" spacing={2} sx={{ px: 2, pb: 1 }}>
+              {unreadCount > 0 && (
+                <Button size="small" startIcon={<DoneRoundedIcon sx={{ fontSize: 15 }} />} onClick={onMarkAllAsRead} sx={{ color: c.primaryGreen, minWidth: 0, fontSize: 12.5 }}>
+                  Mark all read
+                </Button>
+              )}
+              <Button size="small" startIcon={<DeleteSweepRoundedIcon sx={{ fontSize: 15 }} />} onClick={onClearAll} sx={{ color: c.textMuted, minWidth: 0, fontSize: 12.5 }}>
+                Clear all
+              </Button>
+            </Stack>
+            <Divider />
+          </>
+        )}
+        <List sx={{ p: 0, overflowY: 'auto', maxHeight: 360 }}>
+          {notifications.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 5, px: 3 }}>
+              <NotificationsNoneRoundedIcon sx={{ fontSize: 32, color: c.border, mb: 1 }} />
+              <Typography variant="body2" sx={{ color: c.textBody, fontWeight: 600 }}>No notifications yet</Typography>
+              <Typography variant="caption" sx={{ color: c.textMuted }}>System notifications will appear here</Typography>
+            </Box>
+          ) : (
+            notifications.map((notification, i) => (
+              <React.Fragment key={notification.id}>
+                <ListItemButton
                   onClick={() => handleNotificationClick(notification)}
+                  sx={{ alignItems: 'flex-start', gap: 1.2, py: 1.3, px: 2, bgcolor: notification.read ? 'transparent' : c.background }}
                 >
-                  <div className="notification-item-content">
-                    <span className="notification-icon">
-                      {notification.type === 'success' ? '✅' : 
-                       notification.type === 'error' ? '❌' : 'ℹ️'}
-                    </span>
-                    <div className="notification-text">
-                      <p className="notification-message">
-                        {expandedNotification === notification.id 
-                          ? notification.message 
-                          : notification.message.length > 100 
-                            ? `${notification.message.substring(0, 100)}...` 
-                            : notification.message
-                        }
-                      </p>
-                      <small className="notification-time">
-                        {new Date(notification.timestamp).toLocaleTimeString()}
-                      </small>
-                    </div>
-                  </div>
-                  <button 
-                    className="notification-remove"
-                    onClick={(e) => handleCloseNotification(e, notification.id)}
-                    title="Close notification"
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: typeColor(notification.type), mt: 0.7, flexShrink: 0 }} />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ color: c.textDark, fontWeight: notification.read ? 500 : 700 }}>
+                      {expandedId === notification.id || notification.message.length <= 100
+                        ? notification.message
+                        : `${notification.message.substring(0, 100)}...`}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: c.textMuted }}>
+                      {new Date(notification.timestamp).toLocaleTimeString()}
+                    </Typography>
+                  </Box>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => { e.stopPropagation(); onRemoveNotification(notification.id); if (expandedId === notification.id) setExpandedId(null); }}
                   >
-                    ×
-                  </button>
-                  {!notification.read && <div className="unread-dot"></div>}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+                    <ClearRoundedIcon sx={{ fontSize: 15, color: c.textMuted }} />
+                  </IconButton>
+                </ListItemButton>
+                {i < notifications.length - 1 && <Divider />}
+              </React.Fragment>
+            ))
+          )}
+        </List>
+      </Popover>
+    </>
   );
 };
 const Dashboard = () => {
@@ -331,18 +313,6 @@ const Dashboard = () => {
       case 'home':
          return (
             <Box>
-              {/* Toast Notifications */}
-              <div className="notification-container">
-                {toastNotifications.map(notification => (
-                  <Notification
-                    key={notification.id}
-                    message={notification.message}
-                    type={notification.type}
-                    onClose={() => removeToastNotification(notification.id)}
-                  />
-                ))}
-              </div>
-
               <HomeSection
                 currentUser={currentUser}
                 onSectionChange={setActiveSection}
@@ -478,7 +448,7 @@ const Dashboard = () => {
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: c.background }}>
       {/* Toast Notifications Container */}
-      <div className="notification-container">
+      <Stack spacing={1.5} sx={{ position: 'fixed', top: 20, right: 20, zIndex: 2000, alignItems: 'flex-end' }}>
         {toastNotifications.map(notification => (
           <Notification
             key={notification.id}
@@ -487,7 +457,7 @@ const Dashboard = () => {
             onClose={() => removeToastNotification(notification.id)}
           />
         ))}
-      </div>
+      </Stack>
 
       {/* Sidebar */}
       <Box
@@ -559,6 +529,7 @@ const Dashboard = () => {
             Log Out
           </Button>
           <Box
+            onClick={() => setActiveSection('profile-settings')}
             sx={{
               bgcolor: c.background,
               border: `1px solid ${c.border}`,
@@ -567,6 +538,9 @@ const Dashboard = () => {
               display: 'flex',
               alignItems: 'center',
               gap: 1.5,
+              cursor: 'pointer',
+              transition: 'background-color 0.15s',
+              '&:hover': { bgcolor: c.chipGreenBg },
             }}
           >
             <Box
@@ -579,9 +553,14 @@ const Dashboard = () => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
+                overflow: 'hidden',
               }}
             >
-              <PersonRoundedIcon sx={{ fontSize: 18, color: c.primaryGreen }} />
+              {currentUser?.profile_picture ? (
+                <Box component="img" src={currentUser.profile_picture} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <PersonRoundedIcon sx={{ fontSize: 18, color: c.primaryGreen }} />
+              )}
             </Box>
             <Box sx={{ minWidth: 0 }}>
               <Typography variant="body2" noWrap sx={{ fontWeight: 700, color: c.textDark }}>
@@ -611,6 +590,8 @@ const Dashboard = () => {
               onMarkAsRead={markAsRead}
             />
             <Box
+              onClick={() => setActiveSection('profile-settings')}
+              title="Profile Settings"
               sx={{
                 width: 36,
                 height: 36,
@@ -619,9 +600,17 @@ const Dashboard = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                overflow: 'hidden',
+                cursor: 'pointer',
+                transition: 'transform 0.15s',
+                '&:hover': { transform: 'scale(1.08)' },
               }}
             >
-              <PersonRoundedIcon sx={{ fontSize: 18, color: c.textDark }} />
+              {currentUser?.profile_picture ? (
+                <Box component="img" src={currentUser.profile_picture} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <PersonRoundedIcon sx={{ fontSize: 18, color: c.textDark }} />
+              )}
             </Box>
           </Stack>
         </Stack>

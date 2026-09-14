@@ -151,6 +151,38 @@ with app.app_context():
     try:
         database.create_all()
         print("✅ Database tables created successfully!")
+
+        # create_all() only creates missing TABLES, never adds columns to
+        # tables that already exist. This project has no Alembic/migrations
+        # setup, so newly-added model columns need a manual patch-up here.
+        try:
+            from sqlalchemy import text, inspect
+            inspector = inspect(database.engine)
+            existing_tables = inspector.get_table_names()
+            columns_to_ensure = {
+                'users': [
+                    ('profile_picture', 'LONGTEXT'),
+                ],
+                'plant_health_readings': [
+                    ('dosed', 'BOOLEAN NOT NULL DEFAULT FALSE'),
+                    ('farmer_reviewed', 'BOOLEAN NOT NULL DEFAULT FALSE'),
+                    ('farmer_agrees', 'BOOLEAN NULL'),
+                    ('farmer_corrected_class', 'VARCHAR(50) NULL'),
+                    ('reviewed_at', 'DATETIME NULL'),
+                ],
+            }
+            for table, columns in columns_to_ensure.items():
+                if table not in existing_tables:
+                    continue
+                existing_columns = {c['name'] for c in inspector.get_columns(table)}
+                for column_name, ddl_type in columns:
+                    if column_name not in existing_columns:
+                        database.session.execute(text(f"ALTER TABLE {table} ADD COLUMN {column_name} {ddl_type}"))
+                        database.session.commit()
+                        print(f"✅ Added column {table}.{column_name}")
+        except Exception as migration_error:
+            database.session.rollback()
+            print(f"⚠️ Column migration check failed (non-fatal): {migration_error}")
         
         # Check if users table has data
         user_count = User.query.count()

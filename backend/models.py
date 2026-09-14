@@ -15,6 +15,7 @@ class User(database.Model):
     last_login = database.Column(database.DateTime)
 
     phone_number = database.Column(database.String(20))
+    profile_picture = database.Column(database.Text, nullable=True)  # base64 data URI, client-resized before upload
 
     # Relationships
     irrigation_logs = database.relationship('IrrigationLog', backref='user', lazy=True)
@@ -227,6 +228,13 @@ class PlantHealthReading(database.Model):
     image_path = database.Column(database.String(255))  # relative path to the saved image, if kept
     model_version = database.Column(database.String(50))  # e.g. 'disease_v1' or 'pest_v1'
     timestamp = database.Column(database.DateTime, default=datetime.now)
+    dosed = database.Column(database.Boolean, nullable=False, default=False)  # pesticide pump fired for this reading
+
+    # Farmer review, for future human-verified model retraining
+    farmer_reviewed = database.Column(database.Boolean, nullable=False, default=False)
+    farmer_agrees = database.Column(database.Boolean, nullable=True)  # None = not yet reviewed
+    farmer_corrected_class = database.Column(database.String(50), nullable=True)  # set only if farmer disagreed
+    reviewed_at = database.Column(database.DateTime, nullable=True)
 
     __table_args__ = (
         database.Index('idx_planthealth_zone_time', 'zone_id', 'timestamp'),

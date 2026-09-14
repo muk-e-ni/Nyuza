@@ -4,6 +4,7 @@ from config import database
 from datetime import datetime, timedelta
 import jwt
 import os 
+import threading
 from dotenv import load_dotenv
 from functools import wraps
 from services.sensor_service import sensor_service
@@ -95,6 +96,23 @@ def get_irrigation_status():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
     
+def _auto_complete_irrigation_log(log_id):
+    """Mark an irrigation log 'completed' once its duration naturally
+    elapses. Runs on a background timer thread, so it needs its own app
+    context. Only completes it if it's still 'in_progress' — if the user
+    hit Stop early, that already moved it to 'stopped_manual' and this
+    should not clobber it."""
+    try:
+        with sensor_service.app.app_context():
+            log = IrrigationLog.query.get(log_id)
+            if log and log.status == 'in_progress':
+                log.status = 'completed'
+                log.end_time = datetime.now()
+                database.session.commit()
+    except Exception as e:
+        print(f"Error auto-completing irrigation log {log_id}: {e}")
+
+
 @irrigation_bp.route('/api/irrigation/manual', methods=['POST'])
 @token_required
 def manual_irrigation():
@@ -147,10 +165,15 @@ def manual_irrigation():
         success = sensor_service.start_manual_irrigation(duration)
         
         if success:
-            irrigation_log.status = 'completed'
-            # Update end_time when irrigation actually completes
-            # For manual, we'll estimate end time based on duration
+            # Leave status as 'in_progress' — the Arduino runs the pump
+            # autonomously for `duration` seconds and this backend has no
+            # synchronous way to know when that finishes. A background
+            # timer completes the log naturally, and stop-zone can still
+            # mark it 'stopped_manual' if the farmer stops it early.
             irrigation_log.end_time = start_time + timedelta(seconds=duration)
+            timer = threading.Timer(duration, _auto_complete_irrigation_log, args=[irrigation_log.log_id])
+            timer.daemon = True
+            timer.start()
         else:
             irrigation_log.status = 'failed'
             irrigation_log.end_time = datetime.now()
@@ -519,6 +542,14 @@ def get_current_irrigation_status():
             last_irrigation = IrrigationLog.query.filter_by(
                 zone=zone.zone_name
             ).order_by(IrrigationLog.start_time.desc()).first()
+
+            # Real "is this zone running right now" signal — previously the
+            # frontend had no way to know this except by remembering which
+            # button it clicked itself, which broke on refresh / auto-triggers.
+            active_log = IrrigationLog.query.filter_by(
+                zone=zone.zone_name,
+                status='in_progress'
+            ).order_by(IrrigationLog.start_time.desc()).first()
             
             # Determine if irrigation is needed
             needs_irrigation = False
@@ -535,6 +566,10 @@ def get_current_irrigation_status():
                 'moisture_threshold': schedule.moisture_threshold if schedule else 30,
                 'needs_irrigation': needs_irrigation,
                 'auto_mode_enabled': auto_mode_enabled,
+                'is_irrigating': active_log is not None,
+                'active_log_id': active_log.log_id if active_log else None,
+                'active_trigger_type': active_log.trigger_type if active_log else None,
+                'active_started_at': active_log.start_time.isoformat() if active_log else None,
                 'last_irrigation': last_irrigation.start_time.isoformat() if last_irrigation else None,
                 'last_irrigation_type': last_irrigation.trigger_type if last_irrigation else None,
                 'crop_type': zone.crop_type,
@@ -1088,8 +1123,10 @@ def start_automatic_irrigation(zone, schedule, user_id):
         success = sensor_service.start_manual_irrigation(schedule.duration)
         
         if success:
-            irrigation_log.status = 'completed'
             irrigation_log.end_time = start_time + timedelta(seconds=schedule.duration)
+            timer = threading.Timer(schedule.duration, _auto_complete_irrigation_log, args=[irrigation_log.log_id])
+            timer.daemon = True
+            timer.start()
         else:
             irrigation_log.status = 'failed'
             irrigation_log.end_time = datetime.now()

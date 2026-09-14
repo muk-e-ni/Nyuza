@@ -6,7 +6,7 @@ from functools import wraps
 
 from services.disease_model_service import disease_model_service
 from services.pest_model_service import pest_model_service
-from services.vision_monitoring_service import vision_monitoring_service
+from services.vision_monitoring_service import vision_monitoring_service, get_advice
 from utils.image_storage import save_plant_image
 from models import PlantHealthReading
 from config import database
@@ -215,6 +215,42 @@ def analyze_combined():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@vision_bp.route('/readings/<int:reading_id>/feedback', methods=['POST'])
+@token_required
+def submit_reading_feedback(reading_id):
+    """Farmer confirms or corrects a detection — this is the human-verified
+    label future model retraining will use. agrees=True just confirms the
+    prediction; agrees=False should include corrected_class (one of the
+    known class names) so the (still-saved) image can be relabeled."""
+    try:
+        user_id = request.user_id
+        reading = PlantHealthReading.query.filter_by(reading_id=reading_id, user_id=user_id).first()
+        if not reading:
+            return jsonify({'success': False, 'error': 'Reading not found'}), 404
+
+        data = request.get_json() or {}
+        agrees = data.get('agrees')
+        if agrees is None:
+            return jsonify({'success': False, 'error': "'agrees' (true/false) is required"}), 400
+
+        reading.farmer_reviewed = True
+        reading.farmer_agrees = bool(agrees)
+        reading.farmer_corrected_class = None if agrees else data.get('corrected_class')
+        reading.reviewed_at = datetime.now()
+        database.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Thanks — this will help improve future detections.',
+            'reading_id': reading.reading_id,
+        })
+
+    except Exception as e:
+        database.session.rollback()
+        print(f"❌ Reading feedback error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @vision_bp.route('/status', methods=['GET'])
 @token_required
 def get_monitoring_status():
@@ -285,6 +321,11 @@ def get_detection_history():
                     'is_healthy': r.is_healthy,
                     'model_version': r.model_version,
                     'timestamp': r.timestamp.isoformat(),
+                    'dosed': r.dosed,
+                    'advice': get_advice(r.predicted_class),
+                    'farmer_reviewed': r.farmer_reviewed,
+                    'farmer_agrees': r.farmer_agrees,
+                    'farmer_corrected_class': r.farmer_corrected_class,
                 }
                 for r in readings
             ]

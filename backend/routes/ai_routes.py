@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 from services.ai_recommendation_engine import ai_recommendation_engine
-from services.ollama_service import ollama_service
+from services.genai_service import genai_service as ollama_service  # renamed backend, same object shape — see genai_service.py
 from datetime import datetime
 import jwt
 import os

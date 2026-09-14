@@ -4,7 +4,7 @@ from models import Recommendation, RecommendationAction
 from config import database
 from datetime import datetime
 from services.ai_recommendation_engine import ai_recommendation_engine
-from services import ollama_service
+from services.genai_service import genai_service as ollama_service  # renamed backend — was importing the wrong thing anyway (module, not the singleton)
 
 import jwt
 import os
@@ -267,20 +267,15 @@ def debug_recommendations():
 
 @recommendation_bp.route('/api/ollama-status', methods=['GET'])
 def get_ollama_status():
-    """Check Ollama service status"""
+    """Check AI service status (Gemini-backed as of this change — route path
+    kept as-is since the frontend already calls it)."""
     try:
-        # Test if Ollama is responding
-        test_prompt = "Hello"
-        response = ollama_service.client.chat(
-            model=ollama_service.model,
-            messages=[{"role": "user", "content": test_prompt}]
-        )
-        
+        test_result = ollama_service.test_connection()
         return jsonify({
-            'success': True,
-            'status': 'online',
+            'success': test_result.get('success', False),
+            'status': 'online' if test_result.get('success') else 'offline',
             'model': ollama_service.model,
-            'response': 'Ollama is working'
+            'response': test_result.get('response') or test_result.get('error', 'Unknown error')
         })
     except Exception as e:
         return jsonify({

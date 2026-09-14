@@ -9,8 +9,8 @@ load_dotenv()
 class OllamaService:
     def __init__(self):
         self.base_url = os.getenv('OLLAMA_BASE_URL', '')
-        self.model = None
-        self.timeout =30
+        self.model = os.getenv('OLLAMA_MODEL', None)
+        self.timeout = 60
         self.is_available = self.check_availability()
 
         if self.model is None:
@@ -32,11 +32,11 @@ class OllamaService:
                 print(f"🔍 Available models: {model_names}")
                 
                 preferred_models = [
-                    'tinyllama:1.1b',      # 1.1B parameters - smallest
+                    'llama2:latest',
                     'gemma:2b',            # 2B parameters
                     'llama2:7b',           # 7B parameters
-                    'codellama:7b',        # 7B code model
-                    'llama2:latest'        # Original (usually 7B or 13B)
+                    'codellama:7b'       # 7B code model
+                            # Original (usually 7B or 13B)
                 ]
                 
                 for model in preferred_models:

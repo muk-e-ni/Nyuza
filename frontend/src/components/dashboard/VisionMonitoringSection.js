@@ -7,11 +7,17 @@ import {
   Button,
   CircularProgress,
   Alert,
+  TextField,
+  MenuItem,
 } from '@mui/material';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import PhotoCameraRoundedIcon from '@mui/icons-material/PhotoCameraRounded';
 import BugReportRoundedIcon from '@mui/icons-material/BugReportRounded';
 import LocalFloristRoundedIcon from '@mui/icons-material/LocalFloristRounded';
+import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
+import ThumbUpRoundedIcon from '@mui/icons-material/ThumbUpRounded';
+import ThumbDownRoundedIcon from '@mui/icons-material/ThumbDownRounded';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import { visionAPI } from '../../services/api';
 import { nyuzaColors as c } from '../../Theme';
 
@@ -42,6 +48,18 @@ function modelLabel(modelVersion) {
   if (modelVersion?.startsWith('disease')) return 'Disease Check';
   if (modelVersion?.startsWith('pest')) return 'Pest Check';
   return modelVersion || 'Vision Check';
+}
+
+// Mirrors backend/services/vision_monitoring_service.py's ADVICE dict keys —
+// used only to offer sensible correction options in the feedback widget.
+const CLASSES_BY_MODEL = {
+  disease: ['healthy', 'common_rust', 'gray_leaf_spot', 'northern_leaf_blight'],
+  pest: ['no_pest', 'corn_borer', 'army_worm', 'aphid', 'potosia_brevitarsis'],
+};
+
+function classOptionsFor(modelVersion) {
+  if (modelVersion?.startsWith('pest')) return CLASSES_BY_MODEL.pest;
+  return CLASSES_BY_MODEL.disease;
 }
 
 function ModelIcon({ modelVersion, sx }) {
@@ -159,8 +177,9 @@ const VisionMonitoringSection = ({ onNotification }) => {
       if (problems.length === 0) {
         onNotification?.('Analysis complete: no issues found.', 'success');
       } else {
-        const summary = problems.map((r) => `${modelLabel(r.model_version)}: ${formatClassName(r.predicted_class)}`).join(' · ');
-        onNotification?.(`Analysis complete: ${summary}`, 'info');
+        const top = problems.find((r) => r.primary) || problems[0];
+        const extra = problems.length > 1 ? ` (also checked: ${modelLabel(problems.find((r) => r !== top)?.model_version)})` : '';
+        onNotification?.(`Analysis complete: likely ${formatClassName(top.predicted_class)}${extra}`, 'info');
       }
       fetchHistory();
     } catch (error) {
@@ -494,39 +513,185 @@ const VisionMonitoringSection = ({ onNotification }) => {
               <Typography variant="body2" sx={{ color: c.textMuted }}>
                 No models responded — check that a model is loaded on the server.
               </Typography>
-            ) : (
-              <Stack spacing={1.5}>
-                {lastResults.map((r, i) => (
-                  <Stack
-                    key={i}
-                    direction="row"
-                    spacing={1.5}
-                    alignItems="center"
-                    sx={{
-                      p: 1.5,
-                      borderRadius: 2,
-                      border: `1px solid ${r.is_negative ? c.border : c.danger}`,
-                      bgcolor: r.is_negative ? c.background : c.dangerBg,
-                    }}
-                  >
-                    <ModelIcon modelVersion={r.model_version} sx={{ color: r.is_negative ? c.primaryGreen : c.danger }} />
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark }}>
-                        {modelLabel(r.model_version)}: {formatClassName(r.predicted_class)}
-                      </Typography>
-                      <Typography variant="caption" sx={{ color: r.is_negative ? c.textBody : c.danger }}>
-                        Confidence {Math.round(r.confidence * 100)}%
-                        {r.is_negative ? ' • Nothing found' : ' • Needs review'}
-                      </Typography>
-                    </Box>
-                  </Stack>
-                ))}
-              </Stack>
-            )}
+            ) : (() => {
+              // Show the higher-confidence problem as the clear answer;
+              // anything else is a secondary, de-emphasized possibility.
+              // This is the fix for "both models disagree and the farmer
+              // doesn't know which to believe."
+              const sorted = [...lastResults].sort((a, b) => {
+                if (a.primary) return -1;
+                if (b.primary) return 1;
+                return b.confidence - a.confidence;
+              });
+              const allHealthy = sorted.every((r) => r.is_negative);
+
+              return (
+                <Stack spacing={2}>
+                  {allHealthy && (
+                    <Alert severity="success" sx={{ borderRadius: 2 }}>
+                      Both checks came back clean — no disease or pest activity found.
+                    </Alert>
+                  )}
+                  {sorted.map((r, i) => {
+                    const isPrimary = r.primary || (allHealthy && i === 0);
+                    return (
+                      <Box key={i}>
+                        {!isPrimary && (
+                          <Typography variant="caption" sx={{ color: c.textMuted, display: 'block', mb: 0.5 }}>
+                            Also checked ({modelLabel(r.model_version)}) — less likely:
+                          </Typography>
+                        )}
+                        <Stack
+                          direction="row"
+                          spacing={1.5}
+                          alignItems="flex-start"
+                          sx={{
+                            p: isPrimary ? 2 : 1.2,
+                            borderRadius: 2,
+                            border: `1px solid ${r.is_negative ? c.border : (isPrimary ? c.danger : c.border)}`,
+                            bgcolor: r.is_negative ? c.background : (isPrimary ? c.dangerBg : 'white'),
+                            opacity: isPrimary ? 1 : 0.75,
+                          }}
+                        >
+                          <ModelIcon modelVersion={r.model_version} sx={{ color: r.is_negative ? c.primaryGreen : c.danger, fontSize: isPrimary ? 22 : 18, mt: 0.2 }} />
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                              <Typography sx={{ fontWeight: 700, color: c.textDark, fontSize: isPrimary ? 16 : 14 }}>
+                                {formatClassName(r.predicted_class)}
+                              </Typography>
+                              {isPrimary && !r.is_negative && (
+                                <Chip label="Most Likely" size="small" sx={{ bgcolor: c.danger, color: 'white', fontWeight: 700, fontSize: 10, height: 18 }} />
+                              )}
+                            </Stack>
+                            <Typography variant="caption" sx={{ color: r.is_negative ? c.textBody : c.danger }}>
+                              {modelLabel(r.model_version)} • Confidence {Math.round(r.confidence * 100)}%
+                              {r.is_negative ? ' • Nothing found' : ''}
+                            </Typography>
+                            {isPrimary && !r.is_negative && (
+                              <>
+                                <AdviceBlock advice={r.advice} />
+                                <FeedbackWidget reading={r} isHealthy={r.is_negative} />
+                              </>
+                            )}
+                          </Box>
+                        </Stack>
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              );
+            })()}
           </Box>
         </Box>
       )}
     </Box>
+  );
+};
+
+const AdviceBlock = ({ advice, compact }) => {
+  if (!advice) return null;
+  return (
+    <Box sx={{ bgcolor: c.chipGreenBg, borderRadius: 2, p: compact ? 1.2 : 1.8, mt: 1 }}>
+      <Stack direction="row" spacing={0.8} alignItems="flex-start">
+        <AutoAwesomeRoundedIcon sx={{ fontSize: 15, color: c.primaryGreen, mt: 0.2, flexShrink: 0 }} />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="caption" sx={{ color: c.textDark, fontWeight: 700, display: 'block' }}>
+            {advice.summary}
+          </Typography>
+          <Typography variant="caption" sx={{ color: c.textBody }}>
+            {advice.next_steps}
+          </Typography>
+        </Box>
+      </Stack>
+    </Box>
+  );
+};
+
+// Farmer confirms or corrects a detection — this is the human-verified label
+// future model retraining will use (backend: PlantHealthReading.farmer_*).
+const FeedbackWidget = ({ reading, isHealthy, onSubmitted }) => {
+  const [state, setState] = useState('idle'); // idle | correcting | submitting | done
+  const [correctedClass, setCorrectedClass] = useState('');
+
+  if (!reading?.reading_id) return null;
+
+  const submit = async (agrees, corrected) => {
+    setState('submitting');
+    try {
+      await visionAPI.submitReadingFeedback(reading.reading_id, {
+        agrees,
+        corrected_class: agrees ? null : corrected,
+      });
+      setState('done');
+      onSubmitted?.();
+    } catch (error) {
+      setState(agrees ? 'idle' : 'correcting');
+    }
+  };
+
+  if (state === 'done') {
+    return (
+      <Stack direction="row" spacing={0.6} alignItems="center" sx={{ mt: 1 }}>
+        <CheckCircleRoundedIcon sx={{ fontSize: 14, color: c.primaryGreen }} />
+        <Typography variant="caption" sx={{ color: c.primaryGreen, fontWeight: 600 }}>
+          Thanks — this helps improve future detections.
+        </Typography>
+      </Stack>
+    );
+  }
+
+  if (state === 'correcting') {
+    return (
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }} flexWrap="wrap" useFlexGap>
+        <TextField
+          select
+          size="small"
+          value={correctedClass}
+          onChange={(e) => setCorrectedClass(e.target.value)}
+          sx={{ minWidth: 160 }}
+          SelectProps={{ displayEmpty: true }}
+        >
+          <MenuItem value="" disabled>What is it actually?</MenuItem>
+          {classOptionsFor(reading.model_version).map((cls) => (
+            <MenuItem key={cls} value={cls}>{formatClassName(cls)}</MenuItem>
+          ))}
+        </TextField>
+        <Button
+          size="small"
+          variant="contained"
+          disabled={!correctedClass}
+          onClick={() => submit(false, correctedClass)}
+          sx={{ bgcolor: c.sidebarActive, '&:hover': { bgcolor: '#152018' } }}
+        >
+          Submit
+        </Button>
+        <Button size="small" onClick={() => setState('idle')} sx={{ color: c.textMuted }}>Cancel</Button>
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+      <Typography variant="caption" sx={{ color: c.textMuted }}>Does this look right?</Typography>
+      <Button
+        size="small"
+        disabled={state === 'submitting'}
+        startIcon={<ThumbUpRoundedIcon sx={{ fontSize: 14 }} />}
+        onClick={() => submit(true, null)}
+        sx={{ color: c.primaryGreen, minWidth: 0, fontSize: 12 }}
+      >
+        Yes
+      </Button>
+      <Button
+        size="small"
+        disabled={state === 'submitting'}
+        startIcon={<ThumbDownRoundedIcon sx={{ fontSize: 14 }} />}
+        onClick={() => setState('correcting')}
+        sx={{ color: c.textMuted, minWidth: 0, fontSize: 12 }}
+      >
+        No, correct it
+      </Button>
+    </Stack>
   );
 };
 
@@ -603,6 +768,10 @@ const FindingsList = ({ loading, error, items, onDismiss }) => {
               <Typography variant="body2" sx={{ color: c.textBody, mt: 0.3 }}>
                 Confidence {Math.round((r.confidence || 0) * 100)}%
               </Typography>
+              {severe && <AdviceBlock advice={r.advice} compact />}
+              {severe && !r.farmer_reviewed && (
+                <FeedbackWidget reading={r} isHealthy={r.is_healthy} onSubmitted={() => onDismiss(r.reading_id)} />
+              )}
             </Box>
             <Button
               size="small"

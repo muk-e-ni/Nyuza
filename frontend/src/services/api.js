@@ -59,6 +59,8 @@ export const irrigationAPI = {
   getAnalytics: (days = 30) => api.get(`/irrigation/api/irrigation/analytics?days=${days}`),
 
   createSchedule: (data) => api.post('/irrigation/api/irrigation/schedules', data),
+  updateIrrigationSchedule: (scheduleId, data) => api.put(`/irrigation/api/irrigation/schedules/${scheduleId}`, data),
+  deleteIrrigationSchedule: (scheduleId) => api.delete(`/irrigation/api/irrigation/schedules/${scheduleId}`),
   stopZoneIrrigation: (zoneName) => api.post('/irrigation/api/irrigation/stop-zone', { zone: zoneName }),
   
   // Add these for debugging
@@ -210,6 +212,7 @@ export const visionAPI = {
     return api.get('/vision/history', { params });
   },
   getStatus: () => api.get('/vision/status'),
+  submitReadingFeedback: (readingId, data) => api.post(`/vision/readings/${readingId}/feedback`, data),
   // Authenticated snapshot fetch — use this (not snapshotUrl) anywhere the
   // request needs the Authorization header, e.g. "capture from live feed".
   getSnapshotBlob: () => api.get('/vision/snapshot', { responseType: 'blob' }),

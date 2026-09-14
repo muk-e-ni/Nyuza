@@ -216,7 +216,10 @@ def login():
                 'username': user.username,
                 'email': user.email,
                 'role': user.type,
-                'is_admin': user.type == 'admin'
+                'is_admin': user.type == 'admin',
+                'phone_number': user.phone_number,
+                'profile_picture': user.profile_picture,
+                'date_registered': user.date_registered.isoformat() if user.date_registered else None
             }
         }), 200
 
@@ -227,6 +230,11 @@ def login():
             'error': str(e)
         }), 500
 
+# NOTE: this route is currently unreachable — the frontend's authAPI.updateProfile
+# calls PUT /profile/api/profile, which resolves to profile_update_routes.py's
+# update_profile() instead (profile_bp is mounted at /profile, this auth_bp
+# route lives under /auth). Kept in sync anyway in case that ever changes,
+# but the live logic to edit is in profile_update_routes.py.
 @auth_bp.route('/api/profile', methods=['PUT'])
 @token_required
 def update_profile():
@@ -241,6 +249,10 @@ def update_profile():
         # Update username if provided
         if 'username' in data:
             user.username = data['username']
+
+        # Update phone/contact number if provided
+        if 'phone_number' in data:
+            user.phone_number = data['phone_number']
         
         # Update password if provided
         if 'new_password' in data and 'current_password' in data:
@@ -265,7 +277,8 @@ def update_profile():
             'user': {
                 'id': user.user_id,
                 'username': user.username,
-                'email': user.email
+                'email': user.email,
+                'phone_number': user.phone_number
             }
         })
         

@@ -3,6 +3,8 @@ import os
 from datetime import datetime, timedelta
 from models import WeatherData, database
 import json
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file
 
 # How long a cached weather/forecast response is served before a fresh call
 # is made automatically. Manual refresh (force_refresh=True) always bypasses this.
@@ -14,7 +16,7 @@ class WeatherService:
     def __init__(self):
         self.api_key = os.getenv('OPENWEATHER_API_KEY', '')
         self.base_url = "http://api.openweathermap.org/data/2.5"
-        print(f"🌤️ Weather Service initialized with API key: {self.api_key[:8]}...")
+        print(f"🌤️ Weather Service initialized with API key: {self.api_key}")
         # One farm, one location today — a single cache slot is enough. If
         # multi-location support is added later, key these by (lat, lng, city).
         self._current_cache = None
@@ -40,7 +42,7 @@ class WeatherService:
             lng = lng or 36.817223
             
             url = f"{self.base_url}/weather?lat={lat}&lon={lng}&appid={self.api_key}&units=metric"
-            print(f"🌤️ Weather API URL: {url.split('appid')[0]}...")
+            print(f"🌤️ Weather API URL: {url}")
             
             response = requests.get(url, timeout=10)
             print(f"🌤️ Weather API response status: {response.status_code}")

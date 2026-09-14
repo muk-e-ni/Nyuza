@@ -3,6 +3,43 @@ from config import database
 from models import *
 from datetime import datetime
 from main import app
+from sqlalchemy import text, inspect
+
+def ensure_columns():
+    """create_all() only creates tables that don't exist yet — it never
+    alters existing tables. Since this project has no Alembic/migrations
+    setup, new columns added to models.py need to be patched onto an
+    already-existing database by hand. This does that safely (checks
+    information_schema first, so it's a no-op on a fresh database)."""
+    inspector = inspect(database.engine)
+    existing_tables = inspector.get_table_names()
+
+    columns_to_ensure = {
+        'users': [
+            ('profile_picture', 'LONGTEXT'),
+        ],
+        'plant_health_readings': [
+            ('dosed', 'BOOLEAN NOT NULL DEFAULT FALSE'),
+            ('farmer_reviewed', 'BOOLEAN NOT NULL DEFAULT FALSE'),
+            ('farmer_agrees', 'BOOLEAN NULL'),
+            ('farmer_corrected_class', 'VARCHAR(50) NULL'),
+            ('reviewed_at', 'DATETIME NULL'),
+        ],
+    }
+
+    for table, columns in columns_to_ensure.items():
+        if table not in existing_tables:
+            continue  # create_all() will have made it fresh, already correct
+        existing_columns = {c['name'] for c in inspector.get_columns(table)}
+        for column_name, ddl_type in columns:
+            if column_name not in existing_columns:
+                try:
+                    database.session.execute(text(f"ALTER TABLE {table} ADD COLUMN {column_name} {ddl_type}"))
+                    database.session.commit()
+                    print(f"✓ Added column {table}.{column_name}")
+                except Exception as e:
+                    database.session.rollback()
+                    print(f"✗ Could not add column {table}.{column_name}: {e}")
 
 def init_database():
     """Initialize database tables and default data"""
@@ -12,6 +49,8 @@ def init_database():
             # Create only tables that don't exist
             database.create_all()
             print("✓ Tables created/verified")
+
+            ensure_columns()
             
             # Add default system settings (if they don't exist)
             default_settings = [

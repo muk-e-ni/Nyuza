@@ -23,7 +23,7 @@ class SensorDataService:
         self.arduino = None
         self.is_monitoring = False
         self.last_reading = None
-        self.serial_port = 'COM16'  # Arduino COM port
+        self.serial_port = 'COM9'  # Arduino COM port
         self.baudrate = 9600
         self.monitoring_thread = None
         self.connection_attempts = 0
@@ -399,6 +399,19 @@ class SensorDataService:
             logger.error(f"Error in auto irrigation check: {e}")
             return False
 
+    def _auto_complete_log(self, log_id):
+        """Mark an irrigation log 'completed' once its duration naturally
+        elapses, unless it was already stopped manually in the meantime."""
+        try:
+            with self.app.app_context():
+                log = IrrigationLog.query.get(log_id)
+                if log and log.status == 'in_progress':
+                    log.status = 'completed'
+                    log.end_time = datetime.now()
+                    database.session.commit()
+        except Exception as e:
+            logger.error(f"Error auto-completing irrigation log {log_id}: {e}")
+
     def start_auto_irrigation(self, zone_id, schedule, user_id):
         """Start automatic irrigation for a zone with proper logging"""
         try:
@@ -430,8 +443,13 @@ class SensorDataService:
             success = self.start_manual_irrigation(schedule.duration)
             
             if success:
-                irrigation_log.status = 'completed'
+                # Stays 'in_progress' — the Arduino runs the pump
+                # autonomously; a background timer completes the log when
+                # the duration actually elapses, matching real hardware state.
                 irrigation_log.end_time = start_time + timedelta(seconds=schedule.duration)
+                timer = threading.Timer(schedule.duration, self._auto_complete_log, args=[irrigation_log.log_id])
+                timer.daemon = True
+                timer.start()
             else:
                 irrigation_log.status = 'failed'
                 irrigation_log.end_time = datetime.now()

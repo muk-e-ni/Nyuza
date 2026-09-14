@@ -1,743 +1,527 @@
-import React, { useState, useEffect } from 'react';
-import { irrigationAPI, sensorAPI } from '../../services/api';
+import React, { useState, useEffect, useCallback } from 'react';
+import { irrigationAPI, sensorAPI, recommendationAPI, visionAPI } from '../../services/api';
 import {
-  CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon,
-  Info as InfoIcon,
-  Add as AddIcon,
-  Refresh as RefreshIcon,
-  Stop as StopIcon,
-  RocketLaunch as RocketLaunchIcon,
-  WaterDrop as WaterDropIcon,
-  SmartToy as SmartToyIcon,
-  Opacity as OpacityIcon,
-} from '@mui/icons-material';
+  Box,
+  Typography,
+  Stack,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
+  Switch,
+  FormControlLabel,
+  IconButton,
+} from '@mui/material';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded';
+import StopRoundedIcon from '@mui/icons-material/StopRounded';
+import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import VisibilityRoundedIcon from '@mui/icons-material/VisibilityRounded';
+import TuneRoundedIcon from '@mui/icons-material/TuneRounded';
+import { nyuzaColors as c } from '../../Theme';
 
+const MODE = { AUTO: 'auto', MANUAL: 'manual' };
 
-// Notification System Component
-const Notification = ({ message, type, onClose }) => {
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      onClose();
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  return (
-    <div className={`notification notification-${type}`}>
-      <div className="notification-content">
-        <span className="notification-icon">
-          {type === 'success' ? <CheckCircleIcon sx={{ fontSize: 18, color: '#2e7d32' }} /> : type === 'error' ? <CancelIcon sx={{ fontSize: 18, color: '#c04e37' }} /> : <InfoIcon sx={{ fontSize: 18, color: '#3c4e43' }} />}
-        </span>
-        <span className="notification-message">{message}</span>
-      </div>
-      <button className="notification-close" onClick={onClose}>×</button>
-    </div>
-  );
-};
-
-// Schedule Form Component
-const ScheduleForm = ({ zones, onSave, onCancel, editSchedule = null }) => {
-  const [formData, setFormData] = useState({
-    zone_id: editSchedule?.zone_id || '',
-    name: editSchedule?.name || '',
-    trigger_type: editSchedule?.trigger_type || 'moisture',
-    moisture_threshold: editSchedule?.moisture_threshold || 40,
-    duration: editSchedule?.duration || 300,
-    minimum_interval: editSchedule?.minimum_interval || 3600,
-    max_daily_irrigations: editSchedule?.max_daily_irrigations || 3,
-    is_active: editSchedule?.is_active ?? true
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSave(formData);
-  };
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
-  };
-
-  return (
-    <div className="schedule-form-modal">
-      <div className="modal-content">
-        <h3>{editSchedule ? 'Edit Schedule' : 'Create New Schedule'}</h3>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Zone:</label>
-            <select 
-              name="zone_id" 
-              value={formData.zone_id} 
-              onChange={handleChange}
-              required
-            >
-              <option value="">Select a zone</option>
-              {zones.map(zone => (
-                <option key={zone.zone_id} value={zone.zone_id}>
-                  {zone.zone_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label>Schedule Name:</label>
-            <input 
-              type="text" 
-              name="name" 
-              value={formData.name} 
-              onChange={handleChange}
-              placeholder="e.g., Morning Irrigation"
-              required
-            />
-          </div>
-
-          <div className="form-group">
-            <label>Trigger Type:</label>
-            <select name="trigger_type" value={formData.trigger_type} onChange={handleChange}>
-              <option value="moisture">Moisture Level</option>
-              <option value="timed">Timed</option>
-              <option value="manual">Manual Only</option>
-            </select>
-          </div>
-
-          {formData.trigger_type === 'moisture' && (
-            <div className="form-group">
-              <label>Moisture Threshold (%):</label>
-              <input 
-                type="number" 
-                name="moisture_threshold" 
-                value={formData.moisture_threshold} 
-                onChange={handleChange}
-                min="0"
-                max="100"
-                step="5"
-              />
-              <small>Irrigate when moisture drops below this percentage</small>
-            </div>
-          )}
-
-          <div className="form-group">
-            <label>Duration (seconds):</label>
-            <input 
-              type="number" 
-              name="duration" 
-              value={formData.duration} 
-              onChange={handleChange}
-              min="60"
-              step="60"
-            />
-            <small>How long to run irrigation when triggered</small>
-          </div>
-
-          <div className="form-group">
-            <label>Minimum Interval (seconds):</label>
-            <input 
-              type="number" 
-              name="minimum_interval" 
-              value={formData.minimum_interval} 
-              onChange={handleChange}
-              min="3600"
-              step="3600"
-            />
-            <small>Minimum time between irrigations (1 hour = 3600 seconds)</small>
-          </div>
-
-          <div className="form-group">
-            <label>Max Daily Irrigations:</label>
-            <input 
-              type="number" 
-              name="max_daily_irrigations" 
-              value={formData.max_daily_irrigations} 
-              onChange={handleChange}
-              min="1"
-              max="10"
-            />
-          </div>
-
-          <div className="form-group checkbox-group">
-            <label>
-              <input 
-                type="checkbox" 
-                name="is_active" 
-                checked={formData.is_active} 
-                onChange={handleChange}
-              />
-              Active Schedule
-            </label>
-          </div>
-
-          <div className="form-actions">
-            <button type="button" className="btn-secondary" onClick={onCancel}>
-              Cancel
-            </button>
-            <button type="submit" className="btn-primary">
-              {editSchedule ? 'Update Schedule' : 'Create Schedule'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-const IrrigationSection = () => {
+const IrrigationSection = ({ onNotification }) => {
   const [zones, setZones] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [currentStatus, setCurrentStatus] = useState([]);
-  const [isManualMode, setIsManualMode] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [activeIrrigations, setActiveIrrigations] = useState({});
-  const [selectedZoneId, setSelectedZoneId] = useState(null);
+  const [sensorData, setSensorData] = useState(null);
+  const [history, setHistory] = useState({ data: [], summary: {} });
+  const [dosedByZone, setDosedByZone] = useState({});
+  const [mode, setMode] = useState(MODE.AUTO);
+  const [loading, setLoading] = useState(true);
+  const [busyZone, setBusyZone] = useState(null);
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
-  const [realTimeData, setRealTimeData] = useState({});
-  
-  // Notification states
-  const [notifications, setNotifications] = useState([]);
-  const [toastNotifications, setToastNotifications] = useState([]);
+  const [recommendation, setRecommendation] = useState(null);
 
-  useEffect(() => {
-    fetchIrrigationData();
-    const interval = setInterval(fetchIrrigationData, 10000); // Refresh every 10 seconds
-    return () => clearInterval(interval);
-  }, []);
+  const notify = (msg, type = 'info') => onNotification?.(msg, type);
 
-  // Add notification functions
-  const addNotification = (message, type = 'info') => {
-    const newNotification = {
-      id: Date.now() + Math.random(),
-      message,
-      type,
-      timestamp: new Date()
-    };
-    
-    setToastNotifications(prev => [...prev, newNotification]);
-    setNotifications(prev => [newNotification, ...prev]);
-  };
-
-  const removeToastNotification = (id) => {
-    setToastNotifications(prev => prev.filter(notification => notification.id !== id));
-  };
-
-  const fetchIrrigationData = async () => {
+  const fetchIrrigationData = useCallback(async () => {
     try {
-      setLoading(true);
-      const [zonesResponse, schedulesResponse, statusResponse, sensorResponse] = await Promise.all([
+      const [zonesRes, schedulesRes, statusRes, historyRes, sensorRes, visionRes] = await Promise.all([
         irrigationAPI.getUserZones(),
         irrigationAPI.getSchedules(),
         irrigationAPI.getCurrentStatus(),
-        sensorAPI.getCurrentSensorData().catch(() => ({ data: {} })) // Optional real-time data
+        irrigationAPI.getHistory(7),
+        sensorAPI.getCurrentSensorData().catch(() => ({ data: {} })),
+        visionAPI.getHistory(null, 100).catch(() => ({ data: {} })),
       ]);
-      
-      setZones(zonesResponse.data?.zones || []);
-      setSchedules(schedulesResponse.data?.data || []);
-      setCurrentStatus(statusResponse.data?.data || []);
-      setRealTimeData(sensorResponse.data?.data || {});
-      
-      // Auto-select first zone if none selected
-      if (zonesResponse.data?.zones?.length > 0 && !selectedZoneId) {
-        setSelectedZoneId(zonesResponse.data.zones[0].zone_id);
-      }
+      setZones(zonesRes.data?.zones || zonesRes.data?.data || (Array.isArray(zonesRes.data) ? zonesRes.data : []) || []);
+      setSchedules(schedulesRes.data?.data || (Array.isArray(schedulesRes.data) ? schedulesRes.data : []) || []);
+      setCurrentStatus(statusRes.data?.data || (Array.isArray(statusRes.data) ? statusRes.data : []) || []);
+      setHistory({ data: historyRes.data?.data || [], summary: historyRes.data?.summary || {} });
+      setSensorData(sensorRes.data?.data || null);
+
+      // Map zone_id -> most recent dosed reading, for the "Last Dosed" line
+      const readings = visionRes.data?.readings || [];
+      const dosedMap = {};
+      readings.filter(r => r.dosed).forEach(r => {
+        if (!dosedMap[r.zone_id] || new Date(r.timestamp) > new Date(dosedMap[r.zone_id])) {
+          dosedMap[r.zone_id] = r.timestamp;
+        }
+      });
+      setDosedByZone(dosedMap);
     } catch (error) {
       console.error('Error fetching irrigation data:', error);
-      addNotification('Failed to fetch irrigation data', 'error');
+      notify('Failed to load irrigation data', 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Schedule Management
-  const handleCreateSchedule = async (scheduleData) => {
+  const fetchRecommendation = useCallback(async () => {
     try {
-      const response = await irrigationAPI.createSchedule(scheduleData);
-      if (response.data.success) {
-        addNotification('Schedule created successfully', 'success');
-        setShowScheduleForm(false);
-        fetchIrrigationData();
-      }
+      const res = await recommendationAPI.getRecommendations('pending');
+      const list = Array.isArray(res.data) ? res.data : [];
+      const irrigationRec = list.find(r => (r.type || '').toLowerCase().includes('irrigat')) || list[0] || null;
+      setRecommendation(irrigationRec);
     } catch (error) {
-      console.error('Error creating schedule:', error);
-      addNotification('Failed to create schedule', 'error');
+      console.error('Error fetching recommendation:', error);
     }
+  }, []);
+
+  useEffect(() => {
+    fetchIrrigationData();
+    fetchRecommendation();
+    const interval = setInterval(fetchIrrigationData, 15000);
+    return () => clearInterval(interval);
+  }, [fetchIrrigationData, fetchRecommendation]);
+
+  const getZoneStatus = (zoneName) =>
+    Array.isArray(currentStatus) ? currentStatus.find(s => s.zone_name === zoneName) : null;
+
+  const formatRelativeTime = (isoString) => {
+    if (!isoString) return null;
+    const diffMs = Date.now() - new Date(isoString).getTime();
+    const mins = Math.round(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.round(hours / 24);
+    return `${days}d ago`;
   };
 
-  const handleEditSchedule = async (scheduleData) => {
+  const zoneBadge = (status) => {
+    if (status?.is_irrigating) return { label: 'Irrigating Now', bg: c.chipGreenBg, fg: c.primaryGreen };
+    if (status?.needs_irrigation) return { label: 'Dry Warning', bg: c.warningBg, fg: c.warning };
+    return { label: 'Standby', bg: c.background, fg: c.textMuted };
+  };
+
+  const handleStart = async (zone, duration = 300) => {
+    setBusyZone(zone.zone_name);
     try {
-      const response = await irrigationAPI.updateIrrigationSchedule(editingSchedule.id, scheduleData);
-      if (response.data.success) {
-        addNotification('Schedule updated successfully', 'success');
-        setShowScheduleForm(false);
-        setEditingSchedule(null);
-        fetchIrrigationData();
-      }
+      await irrigationAPI.manualControl({ zone: zone.zone_name, duration });
+      notify(`Irrigation started for ${zone.zone_name}`, 'success');
+      setTimeout(fetchIrrigationData, 1500);
     } catch (error) {
-      console.error('Error updating schedule:', error);
-      addNotification('Failed to update schedule', 'error');
-    }
-  };
-
-  const handleDeleteSchedule = async (scheduleId) => {
-    if (window.confirm('Are you sure you want to delete this schedule?')) {
-      try {
-        const response = await irrigationAPI.deleteIrrigationSchedule(scheduleId);
-        if (response.data.success) {
-          addNotification('Schedule deleted successfully', 'success');
-          fetchIrrigationData();
-        }
-      } catch (error) {
-        console.error('Error deleting schedule:', error);
-        addNotification('Failed to delete schedule', 'error');
-      }
-    }
-  };
-
-  const toggleScheduleActive = async (schedule) => {
-    try {
-      const response = await irrigationAPI.updateIrrigationSchedule(schedule.id, {
-        is_active: !schedule.is_active
-      });
-      if (response.data.success) {
-        addNotification(`Schedule ${!schedule.is_active ? 'activated' : 'deactivated'}`, 'success');
-        fetchIrrigationData();
-      }
-    } catch (error) {
-      console.error('Error toggling schedule:', error);
-      addNotification('Failed to update schedule', 'error');
-    }
-  };
-
-  // Auto Mode Functions
-  const triggerAutoModeCheck = async () => {
-    try {
-      if (!selectedZoneId) {
-        addNotification('Please select a zone first', 'warning');
-        return;
-      }
-      
-      const response = await sensorAPI.storeSensorReadings(selectedZoneId);
-      if (response.data.success) {
-        addNotification('Auto mode checked - sensor data updated', 'success');
-        setTimeout(fetchIrrigationData, 2000);
-      }
-    } catch (error) {
-      console.error('Error triggering auto mode:', error);
-      addNotification('Failed to check auto mode', 'error');
-    }
-  };
-
-  const triggerAutoModeCheckForZone = async (zoneId) => {
-    try {
-      const response = await sensorAPI.storeSensorReadings(zoneId);
-      if (response.data.success) {
-        addNotification(`Auto mode tested for zone`, 'success');
-        setTimeout(fetchIrrigationData, 2000);
-      }
-    } catch (error) {
-      console.error('Error testing auto mode for zone:', error);
-      addNotification('Failed to test auto mode', 'error');
-    }
-  };
-
-  // Manual Irrigation Functions
-  const handleManualIrrigation = async (zoneName, duration) => {
-    try {
-      setLoading(true);
-      await irrigationAPI.manualControl({ zone: zoneName, duration });
-      addNotification(`Irrigation started for ${zoneName} for ${duration} seconds`, 'success');
-      setActiveIrrigations(prev => ({ ...prev, [zoneName]: { duration, startTime: Date.now() } }));
-      setTimeout(fetchIrrigationData, 2000);
-    } catch (error) {
-      console.error('Error starting irrigation:', error);
-      addNotification(`Failed to start irrigation for ${zoneName}`, 'error');
+      notify(`Failed to start irrigation for ${zone.zone_name}`, 'error');
     } finally {
-      setLoading(false);
+      setBusyZone(null);
     }
   };
 
-  const handleStopIrrigation = async (zoneName) => {
+  const handleStop = async (zone) => {
+    setBusyZone(zone.zone_name);
     try {
-      setLoading(true);
-      await irrigationAPI.stopZoneIrrigation(zoneName);
-      addNotification(`Irrigation stopped for ${zoneName}`, 'success');
-      setActiveIrrigations(prev => {
-        const newState = { ...prev };
-        delete newState[zoneName];
-        return newState;
-      });
-      setTimeout(fetchIrrigationData, 2000);
+      await irrigationAPI.stopZoneIrrigation(zone.zone_name);
+      notify(`Irrigation stopped for ${zone.zone_name}`, 'success');
+      setTimeout(fetchIrrigationData, 1500);
     } catch (error) {
-      console.error('Error stopping irrigation:', error);
-      addNotification(`Failed to stop irrigation for ${zoneName}`, 'error');
+      notify(`Failed to stop irrigation for ${zone.zone_name} — check the Arduino connection`, 'error');
     } finally {
-      setLoading(false);
+      setBusyZone(null);
     }
   };
 
-  const handleStopAllIrrigation = async () => {
+  const handleToggleScheduleActive = async (schedule) => {
     try {
-      setLoading(true);
-      const stopPromises = Object.keys(activeIrrigations).map(zoneName => 
-        irrigationAPI.stopZoneIrrigation(zoneName)
-      );
-      
-      await Promise.all(stopPromises);
-      addNotification('All irrigation stopped successfully', 'success');
-      
-      setActiveIrrigations({});
-      setTimeout(fetchIrrigationData, 2000);
+      await irrigationAPI.updateIrrigationSchedule(schedule.id, { is_active: !schedule.is_active });
+      setSchedules(prev => prev.map(s => (s.id === schedule.id ? { ...s, is_active: !s.is_active } : s)));
+      notify(`Schedule ${!schedule.is_active ? 'enabled' : 'disabled'}`, 'success');
     } catch (error) {
-      console.error('Error stopping all irrigation:', error);
-      addNotification('Failed to stop all irrigation', 'error');
-    } finally {
-      setLoading(false);
+      notify('Failed to update schedule', 'error');
     }
   };
 
-  const getZoneStatus = (zoneName) => {
-    return Array.isArray(currentStatus) ? currentStatus.find(status => status.zone_name === zoneName) : null;
+  const handleDeleteSchedule = async (schedule) => {
+    if (!window.confirm(`Delete "${schedule.name}"? This cannot be undone.`)) return;
+    try {
+      await irrigationAPI.deleteIrrigationSchedule(schedule.id);
+      setSchedules(prev => prev.filter(s => s.id !== schedule.id));
+      notify('Schedule deleted', 'success');
+    } catch (error) {
+      notify('Failed to delete schedule', 'error');
+    }
   };
 
-  const getActiveAutoIrrigations = () => {
-    return schedules.filter(schedule => 
-      realTimeData.auto_irrigation_in_progress && 
-      getZoneStatus(schedule.zone_name)?.zone_name === schedule.zone_name
+  const handleSaveSchedule = async (formData) => {
+    try {
+      if (editingSchedule) {
+        await irrigationAPI.updateIrrigationSchedule(editingSchedule.id, formData);
+        notify('Schedule updated', 'success');
+      } else {
+        await irrigationAPI.createSchedule(formData);
+        notify('Schedule created', 'success');
+      }
+      setShowScheduleForm(false);
+      setEditingSchedule(null);
+      fetchIrrigationData();
+    } catch (error) {
+      notify('Failed to save schedule', 'error');
+    }
+  };
+
+  const scheduleDescription = (schedule) => {
+    if (schedule.trigger_type === 'moisture') {
+      return `Triggers automatically if soil moisture falls below ${schedule.moisture_threshold ?? 35}%`;
+    }
+    if (schedule.trigger_type === 'manual') {
+      return 'Manual trigger only — runs when activated from this page';
+    }
+    return `Runs a ${Math.round((schedule.duration || 300) / 60)}-minute cycle when triggered`;
+  };
+
+  // ---- derived summary values (shared across both modes) ----
+  const totalWaterUsed = history.summary?.total_water_used || 0;
+  const activeZoneCount = currentStatus.filter(s => s.is_irrigating).length;
+  const waterLevelRaw = sensorData?.water_level;
+  const tankStatus = waterLevelRaw == null ? null : (waterLevelRaw <= 20 ? 'Good' : 'Low — refill soon');
+  const nextSchedule = schedules
+    .filter(s => s.is_active && !currentStatus.find(cs => cs.zone_name === s.zone_name)?.is_irrigating)
+    .sort((a, b) => (a.moisture_threshold ?? 100) - (b.moisture_threshold ?? 100))[0];
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+        <CircularProgress sx={{ color: c.primaryGreen }} />
+      </Box>
     );
-  };
-
-  // Calculate remaining time for active irrigations
-  const getRemainingTime = (zoneName) => {
-    const irrigation = activeIrrigations[zoneName];
-    if (!irrigation) return null;
-    
-    const elapsed = Date.now() - irrigation.startTime;
-    const remaining = Math.max(0, irrigation.duration * 1000 - elapsed);
-    return Math.ceil(remaining / 1000); // Return seconds
-  };
-
-  if (loading && zones.length === 0) {
-    return <div className="irrigation-section"><div className="loading">Loading irrigation data...</div></div>;
   }
 
   return (
-    <div className="irrigation-section">
-      {/* Toast Notifications */}
-      <div className="notification-container">
-        {toastNotifications.map(notification => (
-          <Notification
-            key={notification.id}
-            message={notification.message}
-            type={notification.type}
-            onClose={() => removeToastNotification(notification.id)}
-          />
-        ))}
-      </div>
+    <Box>
+      {/* Summary bar — shared across both modes */}
+      <Box sx={{ bgcolor: c.secondaryGreen, borderRadius: 4, p: 2.5, mb: 3, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+        <SummaryItem
+          label="Water Used (7 Days)"
+          value={totalWaterUsed > 0 ? `${totalWaterUsed.toLocaleString()} Liters` : '— No data yet'}
+        />
+        <SummaryItem
+          label="Tank Level"
+          value={tankStatus || 'No sensor data'}
+          accent={tankStatus === 'Low — refill soon' ? c.warning : undefined}
+        />
+        <SummaryItem label="Active Zones" value={`${activeZoneCount} / ${zones.length || 0} Irrigating`} />
+        <SummaryItem
+          label="Next Scheduled Cycle"
+          value={nextSchedule ? `${nextSchedule.zone_name || ''} — ${nextSchedule.name}` : 'No active schedules'}
+        />
+      </Box>
 
-      {/* Schedule Form Modal */}
+      {/* Mode toggle */}
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3, flexWrap: 'wrap', gap: 2 }}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          {mode === MODE.AUTO ? (
+            <VisibilityRoundedIcon sx={{ fontSize: 20, color: c.textMuted }} />
+          ) : (
+            <TuneRoundedIcon sx={{ fontSize: 20, color: c.textMuted }} />
+          )}
+          <Typography variant="body2" sx={{ color: c.textMuted }}>
+            {mode === MODE.AUTO
+              ? 'System is running automatically — view-only.'
+              : 'Manual mode — you can start, stop, and configure irrigation.'}
+          </Typography>
+        </Stack>
+        <Box sx={{ display: 'inline-flex', bgcolor: c.chipGreenBg, borderRadius: 3, p: 0.5 }}>
+          {[{ id: MODE.AUTO, label: 'Auto' }, { id: MODE.MANUAL, label: 'Manual' }].map(opt => (
+            <Button
+              key={opt.id}
+              onClick={() => setMode(opt.id)}
+              sx={{
+                px: 2.5, py: 0.8, borderRadius: 2.5, fontWeight: 700, fontSize: 13,
+                bgcolor: mode === opt.id ? 'white' : 'transparent',
+                color: mode === opt.id ? c.textDark : c.textMuted,
+                boxShadow: mode === opt.id ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                '&:hover': { bgcolor: mode === opt.id ? 'white' : 'transparent' },
+              }}
+            >
+              {opt.label}
+            </Button>
+          ))}
+        </Box>
+      </Stack>
+
+      {/* Zone cards — read-only in Auto, interactive in Manual */}
+      <Typography variant="h6" sx={{ fontWeight: 700, color: c.textDark, mb: 2 }}>
+        {mode === MODE.AUTO ? 'Live Farm Status' : 'Ground Zones Management'}
+      </Typography>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 3 }}>
+        {zones.length === 0 ? (
+          <Typography variant="body2" sx={{ color: c.textMuted }}>No irrigation zones configured yet.</Typography>
+        ) : zones.map(zone => {
+          const status = getZoneStatus(zone.zone_name);
+          const badge = zoneBadge(status);
+          const isActive = !!status?.is_irrigating;
+          const isBusy = busyZone === zone.zone_name;
+          const lastDosed = dosedByZone[zone.zone_id];
+
+          return (
+            <Box
+              key={zone.zone_id}
+              sx={{ flex: '1 1 380px', minWidth: 300, bgcolor: 'white', border: `1px solid ${c.border}`, borderRadius: 4, p: 2.5 }}
+            >
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                <Typography sx={{ fontWeight: 700, color: c.textDark, fontSize: 16 }}>{zone.zone_name}</Typography>
+                <Chip label={badge.label} size="small" sx={{ bgcolor: badge.bg, color: badge.fg, fontWeight: 700, height: 22 }} />
+              </Stack>
+              <Stack direction="row" spacing={4} sx={{ mb: 1 }}>
+                <Box>
+                  <Typography variant="caption" sx={{ color: c.textMuted }}>Soil Moisture</Typography>
+                  <Typography sx={{ fontWeight: 700, color: c.textDark }}>
+                    {status?.current_moisture != null ? `${status.current_moisture}%` : '—'}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" sx={{ color: c.textMuted }}>Water Need</Typography>
+                  <Typography sx={{ fontWeight: 700, color: c.textDark }}>
+                    {zone.water_requirement ? `${zone.water_requirement} L/day` : '—'}
+                  </Typography>
+                </Box>
+              </Stack>
+              <Typography variant="body2" sx={{ color: c.textMuted, mb: 0.3 }}>
+                Last Irrigated: {formatRelativeTime(status?.last_irrigation) || 'No record yet'}
+              </Typography>
+              <Typography variant="body2" sx={{ color: c.textMuted, mb: 2 }}>
+                Last Dosed: {formatRelativeTime(lastDosed) || 'No record yet'}
+              </Typography>
+
+              {mode === MODE.MANUAL && (
+                isActive ? (
+                  <Button
+                    size="small"
+                    variant="contained"
+                    disabled={isBusy}
+                    startIcon={<StopRoundedIcon sx={{ fontSize: 16 }} />}
+                    onClick={() => handleStop(zone)}
+                    sx={{ bgcolor: c.danger, '&:hover': { bgcolor: '#a5402d' } }}
+                  >
+                    {isBusy ? 'Stopping...' : 'Stop Irrigation'}
+                  </Button>
+                ) : (
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+                    {[[5, 300], [10, 600], [15, 900]].map(([mins, secs]) => (
+                      <Button
+                        key={mins}
+                        size="small"
+                        variant="outlined"
+                        disabled={isBusy}
+                        onClick={() => handleStart(zone, secs)}
+                        sx={{ borderColor: c.border, color: c.textDark, fontWeight: 600 }}
+                      >
+                        {isBusy ? '...' : `${mins} min`}
+                      </Button>
+                    ))}
+                  </Stack>
+                )
+              )}
+            </Box>
+          );
+        })}
+      </Box>
+
+      {/* AI Recommendation — informational in both modes */}
+      {recommendation && (
+        <Box sx={{ bgcolor: c.chipGreenBg, borderRadius: 4, p: 2.5, mb: 3 }}>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+            <AutoAwesomeRoundedIcon sx={{ color: c.primaryGreen, fontSize: 20 }} />
+            <Typography sx={{ fontWeight: 700, color: c.textDark }}>Smart Recommendation</Typography>
+          </Stack>
+          <Typography variant="body2" sx={{ color: c.textDark, fontWeight: 600, mb: 0.5 }}>
+            {recommendation.title}
+          </Typography>
+          <Typography variant="body2" sx={{ color: c.textBody }}>
+            {recommendation.description}
+          </Typography>
+        </Box>
+      )}
+
+      {/* Automatic Scheduling — manual mode only, this is where schedules are configured */}
+      {mode === MODE.MANUAL && (
+        <Box sx={{ bgcolor: 'white', border: `1px solid ${c.border}`, borderRadius: 4, p: 3 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: c.textDark }}>Automatic Scheduling</Typography>
+            <Stack direction="row" spacing={1}>
+              <IconButton size="small" onClick={fetchIrrigationData} title="Refresh">
+                <RefreshRoundedIcon sx={{ fontSize: 18, color: c.textMuted }} />
+              </IconButton>
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<AddRoundedIcon sx={{ fontSize: 16 }} />}
+                onClick={() => { setEditingSchedule(null); setShowScheduleForm(true); }}
+                sx={{ bgcolor: c.sidebarActive, '&:hover': { bgcolor: '#152018' } }}
+              >
+                Add New Trigger
+              </Button>
+            </Stack>
+          </Stack>
+
+          {schedules.length === 0 ? (
+            <Typography variant="body2" sx={{ color: c.textMuted, py: 2 }}>No irrigation schedules configured yet.</Typography>
+          ) : (
+            <Stack spacing={0}>
+              {schedules.map((schedule, i) => (
+                <Stack
+                  key={schedule.id}
+                  direction="row"
+                  alignItems="center"
+                  spacing={2}
+                  sx={{ py: 2, borderBottom: i < schedules.length - 1 ? `1px solid ${c.border}` : 'none' }}
+                >
+                  <Box sx={{ bgcolor: c.chipGreenBg, borderRadius: 2, px: 1.5, py: 1, minWidth: 64, textAlign: 'center' }}>
+                    <Typography variant="caption" sx={{ fontWeight: 700, color: c.primaryGreen }}>
+                      {Math.round((schedule.duration || 300) / 60)} min
+                    </Typography>
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark }} noWrap>
+                      {schedule.zone_name ? `${schedule.zone_name} — ` : ''}{schedule.name}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: c.textMuted }} noWrap>
+                      {scheduleDescription(schedule)}
+                    </Typography>
+                  </Box>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={!!schedule.is_active}
+                        onChange={() => handleToggleScheduleActive(schedule)}
+                        sx={{ '& .MuiSwitch-track': { bgcolor: c.border }, '& .Mui-checked+.MuiSwitch-track': { bgcolor: `${c.primaryGreen} !important` } }}
+                      />
+                    }
+                    label={<Typography variant="body2" sx={{ color: c.textBody }}>Enabled</Typography>}
+                    sx={{ m: 0 }}
+                  />
+                  <Button size="small" onClick={() => { setEditingSchedule(schedule); setShowScheduleForm(true); }} sx={{ color: c.textBody, minWidth: 0 }}>
+                    Edit
+                  </Button>
+                  <IconButton size="small" onClick={() => handleDeleteSchedule(schedule)}>
+                    <DeleteOutlineRoundedIcon sx={{ fontSize: 18, color: c.danger }} />
+                  </IconButton>
+                </Stack>
+              ))}
+            </Stack>
+          )}
+        </Box>
+      )}
+
       {showScheduleForm && (
-        <ScheduleForm
+        <ScheduleDialog
           zones={zones}
-          onSave={editingSchedule ? handleEditSchedule : handleCreateSchedule}
-          onCancel={() => {
-            setShowScheduleForm(false);
-            setEditingSchedule(null);
-          }}
           editSchedule={editingSchedule}
+          onSave={handleSaveSchedule}
+          onClose={() => { setShowScheduleForm(false); setEditingSchedule(null); }}
         />
       )}
+    </Box>
+  );
+};
 
-      {/* Header */}
-      <div className="section-header">
-        <div className="header-main">
-          <h2>Irrigation Control</h2>
-          {zones.length > 0 && (
-            <div className="zone-selector">
-              <label htmlFor="zone-select">Select Zone: </label>
-              <select 
-                id="zone-select"
-                value={selectedZoneId || ''}
-                onChange={(e) => setSelectedZoneId(Number(e.target.value))}
-                disabled={loading}
-              >
-                {zones.map(zone => (
-                  <option key={zone.zone_id} value={zone.zone_id}>
-                    {zone.zone_name}
-                  </option>
-                ))}
-              </select>
-            </div>
+const SummaryItem = ({ label, value, accent }) => (
+  <Box sx={{ flex: '1 1 200px', minWidth: 0 }}>
+    <Typography variant="caption" sx={{ color: '#8e9e94', textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600 }}>
+      {label}
+    </Typography>
+    <Typography variant="h6" sx={{ color: accent || 'white', fontWeight: 800 }} noWrap>
+      {value}
+    </Typography>
+  </Box>
+);
+
+const ScheduleDialog = ({ zones, editSchedule, onSave, onClose }) => {
+  const [form, setForm] = useState({
+    zone_id: editSchedule?.zone_id || (zones[0]?.zone_id ?? ''),
+    name: editSchedule?.name || '',
+    trigger_type: editSchedule?.trigger_type || 'moisture',
+    moisture_threshold: editSchedule?.moisture_threshold ?? 35,
+    duration: editSchedule?.duration ?? 300,
+    minimum_interval: editSchedule?.minimum_interval ?? 3600,
+    max_daily_irrigations: editSchedule?.max_daily_irrigations ?? 3,
+    is_active: editSchedule?.is_active ?? true,
+  });
+
+  const set = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
+
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="sm">
+      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700, color: c.textDark }}>
+        {editSchedule ? 'Edit Trigger' : 'Add New Trigger'}
+        <IconButton onClick={onClose} size="small"><CloseRoundedIcon /></IconButton>
+      </DialogTitle>
+      <DialogContent>
+        <Stack spacing={2.5} sx={{ mt: 1 }}>
+          <TextField select label="Zone" value={form.zone_id} onChange={(e) => set('zone_id', Number(e.target.value))} fullWidth>
+            {zones.map(z => <MenuItem key={z.zone_id} value={z.zone_id}>{z.zone_name}</MenuItem>)}
+          </TextField>
+          <TextField label="Trigger Name" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="e.g. Tomato Block Smart-Boost" fullWidth />
+          <TextField select label="Trigger Type" value={form.trigger_type} onChange={(e) => set('trigger_type', e.target.value)} fullWidth>
+            <MenuItem value="moisture">Moisture Level</MenuItem>
+            <MenuItem value="timed">Timed / Duration</MenuItem>
+            <MenuItem value="manual">Manual Only</MenuItem>
+          </TextField>
+          {form.trigger_type === 'moisture' && (
+            <TextField
+              type="number" label="Moisture Threshold (%)" value={form.moisture_threshold}
+              onChange={(e) => set('moisture_threshold', Number(e.target.value))}
+              inputProps={{ min: 0, max: 100 }} fullWidth
+              helperText="Irrigate when moisture drops below this percentage"
+            />
           )}
-        </div>
-        
-        <div className="control-mode">
-          <button className={`mode-btn ${!isManualMode ? 'active' : ''}`} onClick={() => setIsManualMode(false)}>
-            Auto Mode
-          </button>
-          <button className={`mode-btn ${isManualMode ? 'active' : ''}`} onClick={() => setIsManualMode(true)}>
-            Manual Mode
-          </button>
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="quick-actions">
-        <button className="action-btn primary" onClick={() => setShowScheduleForm(true)} disabled={loading}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><AddIcon sx={{ fontSize: 16 }} /> Create Schedule</span>
-        </button>
-        <button className="action-btn primary" onClick={triggerAutoModeCheck} disabled={loading || !selectedZoneId}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><RefreshIcon sx={{ fontSize: 16 }} /> Check Auto Mode</span>
-        </button>
-        <button className="action-btn secondary" onClick={fetchIrrigationData} disabled={loading}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><RefreshIcon sx={{ fontSize: 16 }} /> Refresh Status</span>
-        </button>
-
-        {Object.keys(activeIrrigations).length > 0 && (
-          <button className="action-btn stop-all" onClick={handleStopAllIrrigation} disabled={loading}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><StopIcon sx={{ fontSize: 16 }} /> Stop All Irrigation</span>
-          </button>
-        )}
-        
-        {loading && <span className="loading-text">Updating...</span>}
-      </div>
-
-      {/* Active Auto Irrigations */}
-      {!isManualMode && getActiveAutoIrrigations().length > 0 && (
-        <div className="active-auto-irrigations">
-          <h3 style={{ display: "flex", alignItems: "center", gap: 6 }}><RocketLaunchIcon sx={{ fontSize: 20 }} /> Active Auto Irrigations</h3>
-          <div className="active-irrigations-grid">
-            {getActiveAutoIrrigations().map(schedule => (
-              <div key={schedule.id} className="active-irrigation-card">
-                <div className="irrigation-header">
-                  <h4>{schedule.zone_name}</h4>
-                  <span className="auto-badge">AUTO</span>
-                </div>
-                <div className="irrigation-details">
-                  <p><strong>Duration:</strong> {schedule.duration} seconds</p>
-                  <p><strong>Time Remaining:</strong> {realTimeData.auto_remaining_time ? Math.ceil(realTimeData.auto_remaining_time / 1000) : 'Calculating...'}s</p>
-                  <p><strong>Trigger:</strong> Low moisture ({getZoneStatus(schedule.zone_name)?.current_moisture}%)</p>
-                </div>
-                <button 
-                  className="btn-stop"
-                  onClick={() => handleStopIrrigation(schedule.zone_name)}
-                  disabled={loading}
-                >
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><StopIcon sx={{ fontSize: 16 }} /> Stop Irrigation</span>
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Manual Irrigation Controls */}
-      {isManualMode && (
-        <div className="manual-controls">
-          <h3>Manual Irrigation Control</h3>
-          {zones.length === 0 ? (
-            <div className="no-data"><p>No irrigation zones configured.</p></div>
-          ) : (
-            <div className="zone-controls-grid">
-              {zones.map(zone => {
-                const zoneStatus = getZoneStatus(zone.zone_name);
-                const remainingTime = getRemainingTime(zone.zone_name);
-                
-                return (
-                  <div key={zone.zone_id} className="zone-control-card">
-                    <div className="zone-header">
-                      <h4>{zone.zone_name}</h4>
-                      <span className="zone-area">{zone.area_sqm}m²</span>
-                      {activeIrrigations[zone.zone_name] && (
-                        <span className="irrigation-active-badge">
-                          ● ACTIVE {remainingTime && `(${remainingTime}s)`}
-                        </span>
-                      )}
-                    </div>
-                    
-                    <div className="zone-info">
-                      <p><strong>Crop:</strong> {zone.crop_type || 'Not specified'}</p>
-                      <p><strong>Soil:</strong> {zone.soil_type || 'Not specified'}</p>
-                      <p><strong>Water Need:</strong> {zone.water_requirement}L/day</p>
-                    </div>
-
-                    <div className="current-status">
-                      {zoneStatus ? (
-                        <>
-                          <p>Moisture: <strong>{zoneStatus.current_moisture}%</strong></p>
-                          <p className={zoneStatus.needs_irrigation ? 'status-warning' : 'status-ok'}>
-                            {zoneStatus.needs_irrigation ? (
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><WaterDropIcon sx={{ fontSize: 14 }} /> Needs Water</span>
-                            ) : (
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><CheckCircleIcon sx={{ fontSize: 14 }} /> Adequate</span>
-                            )}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="status-unknown">No sensor data</p>
-                      )}
-                    </div>
-
-                    <div className="irrigation-buttons">
-                      {activeIrrigations[zone.zone_name] ? (
-                        <button 
-                          onClick={() => handleStopIrrigation(zone.zone_name)}
-                          className="btn-stop"
-                          disabled={loading}
-                        >
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><StopIcon sx={{ fontSize: 16 }} /> Stop Irrigation</span>
-                        </button>
-                      ) : (
-                        <>
-                          <button onClick={() => handleManualIrrigation(zone.zone_name, 300)} className="btn-primary" disabled={loading}>
-                            Water 5 mins
-                          </button>
-                          <button onClick={() => handleManualIrrigation(zone.zone_name, 600)} className="btn-secondary" disabled={loading}>
-                            Water 10 mins
-                          </button>
-                          <button onClick={() => handleManualIrrigation(zone.zone_name, 900)} className="btn-tertiary" disabled={loading}>
-                            Water 15 mins
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Automatic Schedules */}
-      {!isManualMode && (
-        <div className="auto-schedules">
-          <h3>Automatic Irrigation Schedules</h3>
-          {schedules.length === 0 ? (
-            <div className="no-schedules">
-              <p>No irrigation schedules configured.</p>
-              <button className="btn-primary" onClick={() => setShowScheduleForm(true)}>
-                Create First Schedule
-              </button>
-            </div>
-          ) : (
-            <div className="schedules-list">
-              {schedules.map(schedule => {
-                const zoneStatus = getZoneStatus(schedule.zone_name);
-                const isAutoMode = schedule.trigger_type === 'moisture';
-                
-                return (
-                  <div key={schedule.id} className="schedule-card">
-                    <div className="schedule-header">
-                      <h4>{schedule.zone_name} - {schedule.name}</h4>
-                      <div className="schedule-status">
-                        <span className={`status-badge ${schedule.is_active ? 'active' : 'inactive'}`}>
-                          {schedule.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                        {isAutoMode && <span className="auto-mode-badge" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><SmartToyIcon sx={{ fontSize: 12 }} /> AUTO</span>}
-                      </div>
-                    </div>
-                    
-                    <div className="schedule-details">
-                      <div className="detail-row">
-                        <label>Trigger Type:</label>
-                        <span>{schedule.trigger_type}</span>
-                      </div>
-                      {isAutoMode && (
-                        <div className="detail-row">
-                          <label>Moisture Threshold:</label>
-                          <span>{schedule.moisture_threshold}%</span>
-                        </div>
-                      )}
-                      <div className="detail-row">
-                        <label>Current Moisture:</label>
-                        <span className={zoneStatus?.current_moisture < schedule.moisture_threshold ? 'warning' : 'ok'}>
-                          {zoneStatus ? `${zoneStatus.current_moisture}%` : 'No data'}
-                        </span>
-                      </div>
-                      <div className="detail-row">
-                        <label>Duration:</label>
-                        <span>{schedule.duration} seconds</span>
-                      </div>
-                      <div className="detail-row">
-                        <label>Last Triggered:</label>
-                        <span>
-                          {schedule.last_triggered ? 
-                            new Date(schedule.last_triggered).toLocaleString() : 
-                            'Never'
-                          }
-                        </span>
-                      </div>
-                      <div className="detail-row">
-                        <label>Auto Mode Status:</label>
-                        <span className={zoneStatus?.needs_irrigation ? 'status-warning' : 'status-ok'}>
-                          {zoneStatus?.needs_irrigation ? (
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><OpacityIcon sx={{ fontSize: 14 }} /> Ready to irrigate</span>
-                          ) : (
-                            <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><CheckCircleIcon sx={{ fontSize: 14 }} /> Conditions met</span>
-                          )}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="schedule-actions">
-                      <button className="btn-primary" onClick={() => {
-                        setEditingSchedule(schedule);
-                        setShowScheduleForm(true);
-                      }}>
-                        Edit
-                      </button>
-                      <button className="btn-secondary" onClick={() => toggleScheduleActive(schedule)}>
-                        {schedule.is_active ? 'Deactivate' : 'Activate'}
-                      </button>
-                      <button className="btn-danger" onClick={() => handleDeleteSchedule(schedule.id)}>
-                        Delete
-                      </button>
-                      {isAutoMode && (
-                        <button className="btn-tertiary" onClick={() => triggerAutoModeCheckForZone(schedule.zone_id)}>
-                          Test
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Current System Status */}
-      <div className="system-status-overview">
-        <h3>Current System Status</h3>
-        {currentStatus.length === 0 ? (
-          <div className="no-data"><p>No current status data available.</p></div>
-        ) : (
-          <div className="status-overview-grid">
-            {currentStatus.map(status => (
-              <div key={status.zone_id} className="status-overview-item">
-                <h4>{status.zone_name}</h4>
-                <div className="moisture-gauge">
-                  <div className="gauge-fill" style={{ width: `${Math.min(status.current_moisture, 100)}%` }}></div>
-                  <span className="gauge-text">{status.current_moisture}%</span>
-                </div>
-                <div className="threshold-info">Threshold: {status.moisture_threshold}%</div>
-                <div className={`action-needed ${status.needs_irrigation ? 'yes' : 'no'}`}>
-                  {status.needs_irrigation ? (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><OpacityIcon sx={{ fontSize: 14 }} /> Irrigation Needed</span>
-                  ) : (
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><CheckCircleIcon sx={{ fontSize: 14 }} /> OK</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+          <TextField
+            type="number" label="Duration (seconds)" value={form.duration}
+            onChange={(e) => set('duration', Number(e.target.value))}
+            inputProps={{ min: 60, step: 60 }} fullWidth
+            helperText="How long to run irrigation when triggered"
+          />
+          <TextField
+            type="number" label="Minimum Interval (seconds)" value={form.minimum_interval}
+            onChange={(e) => set('minimum_interval', Number(e.target.value))}
+            inputProps={{ min: 3600, step: 3600 }} fullWidth
+            helperText="Minimum time between irrigations"
+          />
+          <TextField
+            type="number" label="Max Daily Irrigations" value={form.max_daily_irrigations}
+            onChange={(e) => set('max_daily_irrigations', Number(e.target.value))}
+            inputProps={{ min: 1, max: 10 }} fullWidth
+          />
+          <FormControlLabel
+            control={<Switch checked={form.is_active} onChange={(e) => set('is_active', e.target.checked)} />}
+            label="Active"
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ p: 3, pt: 1 }}>
+        <Button onClick={onClose} sx={{ color: c.textBody }}>Cancel</Button>
+        <Button
+          variant="contained"
+          disabled={!form.zone_id || !form.name.trim()}
+          onClick={() => onSave(form)}
+          sx={{ bgcolor: c.sidebarActive, '&:hover': { bgcolor: '#152018' } }}
+        >
+          {editSchedule ? 'Update Trigger' : 'Create Trigger'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 

@@ -36,7 +36,7 @@ from config import database
 
 logger = logging.getLogger(__name__)
 
-CAMERA_SOURCE = "http://192.168.1.100:8080/video"  # <-- set to your phone's IP Webcam URL
+CAMERA_SOURCE = "http://192.168.100.96:8080/video"  # <-- set to your phone's IP Webcam URL
 CHECK_INTERVAL_SECONDS = 180                        # every 3 minutes, for the demo
 AUTO_DOSE_THRESHOLD = 0.90                          # only auto-act when very confident
 DOSE_DURATION_MS = 1500
@@ -105,6 +105,23 @@ class VisionMonitoringService:
     def init_app(self, app):
         self.app = app
 
+    def _resolve_monitoring_identity(self):
+        """Same approach as sensor_service.py's version — farm is the real
+        identity (resolve_monitoring_farm_id reads it from the registered
+        Device), this just looks up that farm's owner so _check_once's
+        existing user_id-based internals don't need to change."""
+        from utils.monitoring_user import resolve_monitoring_farm_id, resolve_monitoring_user_id
+        farm_id = resolve_monitoring_farm_id()
+        if farm_id:
+            try:
+                from models import Farm
+                farm = Farm.query.get(farm_id)
+                if farm:
+                    return farm.owner_user_id
+            except Exception as e:
+                logger.error(f"Could not resolve owner for farm_id={farm_id}: {e}")
+        return resolve_monitoring_user_id()
+
     def get_status(self):
         """Everything the frontend needs to render the 'Active Feed Modules'
         panel honestly: is the background loop running, is a camera even
@@ -133,7 +150,7 @@ class VisionMonitoringService:
                 try:
                     if self.app:
                         with self.app.app_context():
-                            self._check_once()
+                            self._check_once(user_id=self._resolve_monitoring_identity())
                     else:
                         self._check_once()
                 except Exception as e:

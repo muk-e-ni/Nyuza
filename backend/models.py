@@ -72,11 +72,74 @@ class AdminLog(database.Model):
 
     admin = database.relationship('User', backref='admin_actions')
 
+
+class Farm(database.Model):
+    """A physical deployment: a farm site, its zones, its sensors, and the
+    Device(s) that report data for it. Introduced to stop using user_id as
+    a stand-in for 'which farm' — that worked only by accident, as long as
+    exactly one real user was ever using real hardware. Kept deliberately
+    minimal for now (no billing/subscription fields) — that's a later
+    phase once there's an actual second farm to build against."""
+    __tablename__ = 'farms'
+
+    farm_id = database.Column(database.Integer, primary_key=True)
+    name = database.Column(database.String(120), nullable=False)
+    owner_user_id = database.Column(database.Integer, database.ForeignKey('users.user_id'), nullable=False)
+    location = database.Column(database.String(255))
+    is_active = database.Column(database.Boolean, default=True)
+    created_at = database.Column(database.DateTime, default=datetime.now)
+
+    owner = database.relationship('User', backref='owned_farms', foreign_keys=[owner_user_id])
+    memberships = database.relationship('FarmMembership', backref='farm', lazy=True)
+    devices = database.relationship('Device', backref='farm', lazy=True)
+
+
+class FarmMembership(database.Model):
+    """Which users can access a farm, and at what level. Today this will
+    only ever have one row per farm (the owner) — but modeling it as a
+    membership table from the start, rather than just Farm.owner_user_id
+    alone, means adding a second person with access later (a hired
+    operator, a co-founder) doesn't require another migration."""
+    __tablename__ = 'farm_memberships'
+
+    membership_id = database.Column(database.Integer, primary_key=True)
+    farm_id = database.Column(database.Integer, database.ForeignKey('farms.farm_id'), nullable=False)
+    user_id = database.Column(database.Integer, database.ForeignKey('users.user_id'), nullable=False)
+    role = database.Column(database.String(20), nullable=False, default='owner')  # owner, operator, viewer
+    joined_at = database.Column(database.DateTime, default=datetime.now)
+
+    user = database.relationship('User', backref='farm_memberships')
+
+    __table_args__ = (
+        database.UniqueConstraint('farm_id', 'user_id', name='uq_farm_membership'),
+    )
+
+
+class Device(database.Model):
+    """A physical piece of hardware reporting to a farm — the controller
+    board today, and later potentially separate sensor nodes (LoRaWAN soil
+    probes, tank sensors) alongside it. This is what the background
+    monitoring loops resolve identity from now (see
+    utils/monitoring_user.py's resolve_monitoring_farm_id), instead of the
+    old 'guess which user owns the most zones' heuristic — hardware now
+    explicitly knows which farm it belongs to."""
+    __tablename__ = 'devices'
+
+    device_id = database.Column(database.Integer, primary_key=True)
+    farm_id = database.Column(database.Integer, database.ForeignKey('farms.farm_id'), nullable=False)
+    device_identifier = database.Column(database.String(120), nullable=False, unique=True)  # e.g. a MAC address or an assigned serial
+    device_type = database.Column(database.String(30), nullable=False, default='controller')  # controller, soil_sensor, tank_sensor, ...
+    transport_type = database.Column(database.String(20), nullable=False, default='serial')  # serial, wifi, lorawan
+    status = database.Column(database.String(20), nullable=False, default='active')
+    last_seen_at = database.Column(database.DateTime)
+    created_at = database.Column(database.DateTime, default=datetime.now)
+
 class Sensors(database.Model):
     __tablename__ = 'sensors'
 
     sensor_id = database.Column(database.Integer, primary_key=True)
     sensor_name = database.Column(database.String(100), nullable=False, unique=True)
+    farm_id = database.Column(database.Integer, database.ForeignKey('farms.farm_id'), nullable=True)  # backfilled at startup; see get_or_create_sensor in sensor_service.py
     location = database.Column(database.String(100), nullable=False)
     last_updated = database.Column(database.DateTime, default=datetime.now)
     type = database.Column(database.String(50), default='temperature')
@@ -173,6 +236,7 @@ class IrrigationZone(database.Model):
     is_active = database.Column(database.Boolean, default=True)
     created_at = database.Column(database.DateTime, default=datetime.now)
     user_id = database.Column(database.Integer, database.ForeignKey('users.user_id'), nullable=False)
+    farm_id = database.Column(database.Integer, database.ForeignKey('farms.farm_id'), nullable=True)  # backfilled at startup; nullable so this stays additive on an existing DB
 
     # Relationships
     schedules = database.relationship('IrrigationSchedule', backref='zone', lazy=True)

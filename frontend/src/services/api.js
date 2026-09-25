@@ -83,6 +83,7 @@ export const sensorAPI = {
 
 export const recommendationAPI = {
   getRecommendations: (status = 'pending') => api.get(`/recommendations/api/recommendations?status=${status}`),
+  getActivityFeed: (limit = 20) => api.get(`/recommendations/api/activity-feed?limit=${limit}`),
   applyRecommendation: (recId) => api.post(`/recommendations/api/recommendations/${recId}/apply`),
   dismissRecommendation: (recId) => api.post(`/recommendations/api/recommendations/${recId}/dismiss`),
 
@@ -120,7 +121,7 @@ export const adminAPI = {
 export const systemAPI = {
   getSettings: () => api.get('/system/api/system/settings'),
   updateSettings: (data) => api.put('/system/api/system/settings', data),
-  getZones: () => api.get('/irrigation/api/irrigation/zones'), // Fixed: Use irrigation endpoint
+  getZones: () => api.get('/system/api/system/zones'), // Back to the system endpoint now that it's properly scoped (was redirected to the irrigation one when this was unscoped/buggy) - this one also returns description, water_requirement, and assigned_sensors that Settings needs
   getHealth: () => api.get('/system/api/system/health'),
 };
 
@@ -143,6 +144,9 @@ export const zoneAPI = {
   createZone: (data) => api.post('/system/api/system/zones', data),
   updateZone: (zoneId, data) => api.put(`/system/api/system/zones/${zoneId}`, data),
   deleteZone: (zoneId) => api.delete(`/system/api/system/zones/${zoneId}`),
+  getFarmSensors: () => api.get('/system/api/system/sensors'),
+  assignSensor: (zoneId, sensorId) => api.post(`/system/api/system/zones/${zoneId}/sensors`, { sensor_id: sensorId }),
+  unassignSensor: (zoneId, sensorId) => api.delete(`/system/api/system/zones/${zoneId}/sensors/${sensorId}`),
 };
 
 export const aiAPI = {

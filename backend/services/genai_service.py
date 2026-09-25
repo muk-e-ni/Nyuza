@@ -10,13 +10,9 @@ generate_detailed_report, analyze_irrigation_patterns, generate_weather_insights
 generate_predictive_schedule, get_available_models, is_available, model,
 base_url) so callers didn't need to change beyond the import line.
 
-Setup: set GEMINI_API_KEY in your .env (get one free at
-https://aistudio.google.com/apikey). Optionally set GEMINI_MODEL to override
-the default — model names shift over time; gemini-2.5-flash-lite is used
-here as a cheap, fast default as of when this was written (Sept 2026),
-but check https://ai.google.dev/gemini-api/docs/models for what's current.
 """
 
+import re
 import os
 import json
 import logging
@@ -29,6 +25,22 @@ from google.genai.errors import ClientError, ServerError
 
 load_dotenv()
 logger = logging.getLogger(__name__)
+
+
+def _strip_markdown(text):
+    """Gemini often formats responses with markdown (**bold**, bullet
+    lists, headers) — fine for a chat UI, but this text lands straight in
+    plain <Typography> components across the app, so literal ** and #
+    characters were showing up. Strip the common cases down to plain prose."""
+    if not text:
+        return text
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)      # **bold**
+    text = re.sub(r'(?<!\*)\*(?!\*)(.+?)\*(?!\*)', r'\1', text)  # *italic* (not part of **)
+    text = re.sub(r'^#{1,6}\s*', '', text, flags=re.MULTILINE)  # # Headers
+    text = re.sub(r'^\s*[-*+]\s+', '• ', text, flags=re.MULTILINE)  # - bullets -> •
+    text = re.sub(r'`([^`]+)`', r'\1', text)          # `code`
+    text = re.sub(r'\n{3,}', '\n\n', text)             # collapse excess blank lines
+    return text.strip()
 
 
 class GenAIService:
@@ -64,7 +76,7 @@ class GenAIService:
                     max_output_tokens=max_output_tokens,
                 ),
             )
-            return (response.text or '').strip()
+            return _strip_markdown((response.text or '').strip())
         except (ClientError, ServerError) as e:
             logger.error(f"Gemini API error: {e}")
             return None

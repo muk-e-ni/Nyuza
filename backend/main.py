@@ -6,7 +6,7 @@ from routes.irrigations_routes import irrigation_bp
 from routes.system_routes import system_bp
 from routes.recommendations_routes import recommendation_bp
 from config import get_db_conn, database, get_database_connection
-from models import User
+from models import User, Farm, FarmMembership, Device, IrrigationZone, Sensors
 import jwt 
 from datetime import datetime
 from functools import wraps
@@ -170,6 +170,12 @@ with app.app_context():
                     ('farmer_corrected_class', 'VARCHAR(50) NULL'),
                     ('reviewed_at', 'DATETIME NULL'),
                 ],
+                'irrigation_zones': [
+                    ('farm_id', 'INT NULL'),
+                ],
+                'sensors': [
+                    ('farm_id', 'INT NULL'),
+                ],
             }
             for table, columns in columns_to_ensure.items():
                 if table not in existing_tables:
@@ -183,6 +189,74 @@ with app.app_context():
         except Exception as migration_error:
             database.session.rollback()
             print(f"⚠️ Column migration check failed (non-fatal): {migration_error}")
+
+
+        try:
+            existing_farm = Farm.query.first()
+            if not existing_farm:
+
+                seed_zone = IrrigationZone.query.first()
+                owner_user_id = seed_zone.user_id if seed_zone else None
+                if not owner_user_id:
+                    first_user = User.query.order_by(User.user_id).first()
+                    owner_user_id = first_user.user_id if first_user else None
+
+                if owner_user_id:
+                    farm = Farm(name="Primary Farm", owner_user_id=owner_user_id)
+                    database.session.add(farm)
+                    database.session.flush()  # get farm.farm_id before using it below
+
+                    database.session.add(FarmMembership(
+                        farm_id=farm.farm_id, user_id=owner_user_id, role='owner'
+                    ))
+
+                    # Represents whatever hardware this backend instance is
+                    # currently configured to talk to (see sensor_service.py's
+                    # transport setup) — one row today, matching the one
+                    # physical Arduino/ESP8266 bridge in this prototype.
+                    device_identifier = os.getenv('ARDUINO_WIFI_HOST') or os.getenv('MONITORING_DEVICE_ID') or 'primary-controller'
+                    transport_type = os.getenv('ARDUINO_TRANSPORT', 'serial').strip().lower()
+                    database.session.add(Device(
+                        farm_id=farm.farm_id,
+                        device_identifier=device_identifier,
+                        device_type='controller',
+                        transport_type=transport_type,
+                    ))
+
+                    # Backfill farm_id onto anything created before Farm existed.
+                    IrrigationZone.query.filter(
+                        IrrigationZone.user_id == owner_user_id,
+                        IrrigationZone.farm_id.is_(None)
+                    ).update({'farm_id': farm.farm_id}, synchronize_session=False)
+                    # Sensors have no user_id to match against (that was the
+                    # actual gap) — with only one farm, every un-owned sensor
+                    # unambiguously belongs to it. Once a second farm can
+                    # exist, this line stops being correct and needs the
+                    # real per-device ownership path instead.
+                    Sensors.query.filter(Sensors.farm_id.is_(None)).update(
+                        {'farm_id': farm.farm_id}, synchronize_session=False
+                    )
+
+                    # get_or_create_sensor (sensor_service.py) now looks
+                    # sensors up by a "<name> - Farm <farm_id>" suffix
+                    # instead of the old "<name> - User <user_id>" one.
+                    # Without renaming existing rows to match, the next
+                    # monitoring cycle would think they're new sensors and
+                    # create fresh duplicates — silently orphaning all
+                    # existing reading history under the old row instead of
+                    # continuing it.
+                    old_suffix = f" - User {owner_user_id}"
+                    new_suffix = f" - Farm {farm.farm_id}"
+                    for sensor in Sensors.query.filter(Sensors.sensor_name.like(f"%{old_suffix}")).all():
+                        sensor.sensor_name = sensor.sensor_name[:-len(old_suffix)] + new_suffix
+
+                    database.session.commit()
+                    print(f"✅ Created initial Farm (farm_id={farm.farm_id}) for user_id={owner_user_id}, backfilled zones/sensors")
+                else:
+                    print("ℹ️ No users yet — skipping Farm backfill (nothing to attach it to)")
+        except Exception as farm_error:
+            database.session.rollback()
+            print(f"⚠️ Farm backfill failed (non-fatal): {farm_error}")
         
         # Check if users table has data
         user_count = User.query.count()
@@ -192,12 +266,13 @@ with app.app_context():
         print(f"❌ Error creating tables: {e}")
 
 if __name__ == '__main__':
-    # Initialize services when the app starts
+
     with app.app_context():
         initialize_services()
     
     try:
-        app.run(debug=True, host='0.0.0.0', port=5000)
+     
+        app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)
     finally:
         # Ensure services are stopped when the app exits
         stop_services()

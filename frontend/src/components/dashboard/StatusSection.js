@@ -225,32 +225,41 @@ const StatusSection = () => {
           </Stack>
 
           <Typography variant="caption" sx={{ color: c.textMuted, textTransform: 'uppercase', letterSpacing: 1, fontWeight: 600 }}>
-            Inactive Sensors & Alerts
+            All Sensors
           </Typography>
-          <Stack sx={{ mt: 1 }}>
-            {inactiveSensors.length === 0 ? (
+          <Stack sx={{ mt: 1, maxHeight: 340, overflowY: 'auto' }}>
+            {sensorStatus.length === 0 ? (
               <Typography variant="body2" sx={{ color: c.textMuted, py: 2 }}>
-                No sensor alerts right now.
+                No sensors registered yet — they're created automatically the first time data comes in from the Arduino.
               </Typography>
             ) : (
-              inactiveSensors.slice(0, 6).map((sensor, i) => (
-                <Stack
-                  key={sensor.sensor_id || sensor.id || i}
-                  direction="row"
-                  spacing={1.5}
-                  sx={{ py: 1.5, borderBottom: i < inactiveSensors.length - 1 ? `1px solid ${c.border}` : 'none' }}
-                >
-                  <Box sx={{ width: 4, borderRadius: 1, bgcolor: c.warning, alignSelf: 'stretch', minHeight: 32 }} />
-                  <Box sx={{ flex: 1 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark }}>
-                      {sensor.sensor_name || sensor.name || 'Unknown Sensor'}
-                    </Typography>
-                    <Typography variant="body2" sx={{ color: c.textBody }}>
-                      {sensor.location || 'Unknown location'} • last value {sensor.last_value ?? sensor.value ?? '--'}
-                    </Typography>
-                  </Box>
-                </Stack>
-              ))
+              sensorStatus.map((sensor, i) => {
+                const badge = sensor.status === 'active'
+                  ? { label: 'Online', bg: c.chipGreenBg, fg: c.primaryGreen, bar: c.primaryGreen }
+                  : sensor.status === 'stale'
+                    ? { label: 'Not Responding', bg: c.warningBg, fg: c.warning, bar: c.warning }
+                    : { label: 'Never Reported', bg: c.dangerBg, fg: c.danger, bar: c.danger };
+                return (
+                  <Stack
+                    key={sensor.sensor_id || i}
+                    direction="row"
+                    spacing={1.5}
+                    alignItems="center"
+                    sx={{ py: 1.5, borderBottom: i < sensorStatus.length - 1 ? `1px solid ${c.border}` : 'none' }}
+                  >
+                    <Box sx={{ width: 4, borderRadius: 1, bgcolor: badge.bar, alignSelf: 'stretch', minHeight: 32 }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark }} noWrap>
+                        {sensor.sensor_name || 'Unknown Sensor'}
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: c.textBody }} noWrap>
+                        {sensor.location || 'Unknown location'} • reading: {sensor.display_value ?? '—'}
+                      </Typography>
+                    </Box>
+                    <Chip label={badge.label} size="small" sx={{ bgcolor: badge.bg, color: badge.fg, fontWeight: 700, flexShrink: 0 }} />
+                  </Stack>
+                );
+              })
             )}
           </Stack>
         </Box>

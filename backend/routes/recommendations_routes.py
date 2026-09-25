@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
-from models import Recommendation, RecommendationAction
+from models import Recommendation, RecommendationAction, IrrigationLog, PlantHealthReading
 from config import database
 from datetime import datetime
 from services.ai_recommendation_engine import ai_recommendation_engine
@@ -60,13 +60,17 @@ def token_required(f):
     return decorated
 
 @recommendation_bp.route('/api/recommendations', methods=['GET'])
+@token_required
 def get_recommendations():
-    """Get AI recommendations"""
+    """Get AI recommendations for the logged-in user.
+
+    Previously had no auth at all, and no user_id filter — returned every
+    recommendation for every user to anyone who asked."""
     try:
         status = request.args.get('status', 'pending')
         
         recommendations = Recommendation.query.filter_by(
-            status=status
+            status=status, user_id=request.user_id
         ).order_by(
             Recommendation.priority.desc(),
             Recommendation.created_at.desc()
@@ -92,11 +96,103 @@ def get_recommendations():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@recommendation_bp.route('/api/recommendations/<int:rec_id>/apply', methods=['POST'])
-def apply_recommendation(rec_id):
-    """Apply a recommendation"""
+
+@recommendation_bp.route('/api/activity-feed', methods=['GET'])
+@token_required
+def get_activity_feed():
+    """Merged 'recent activity' for the dashboard — was previously just
+    AI recommendations (get_recommendations above), which is why the Home
+    page's alerts panel only ever showed AI-generated items and nothing
+    about what the system had actually been doing (irrigation running,
+    pest/disease detections). Pulls from the tables that already record
+    these events (IrrigationLog, PlantHealthReading) rather than adding
+    new write-side logging calls throughout the app — lower risk than
+    instrumenting every event-producing route right now, and the data
+    already exists.
+
+    Every item is normalized to the same {id, title, description,
+    priority, source, created_at} shape recommendations already use, so
+    the frontend doesn't need type-specific rendering — except 'source'
+    lets it skip showing a Dismiss button on history items, since you
+    can't meaningfully dismiss a thing that already happened.
+    """
     try:
-        recommendation = Recommendation.query.get(rec_id)
+        limit = request.args.get('limit', 20, type=int)
+        user_id = request.user_id
+        items = []
+
+        recommendations = Recommendation.query.filter_by(user_id=user_id).order_by(
+            Recommendation.created_at.desc()
+        ).limit(limit).all()
+        for rec in recommendations:
+            items.append({
+                'id': f'rec-{rec.recommendation_id}',
+                'ref_id': rec.recommendation_id,
+                'title': rec.title,
+                'description': rec.description,
+                'priority': rec.priority,
+                'source': 'recommendation',
+                'created_at': rec.created_at,
+            })
+
+        irrigation_events = IrrigationLog.query.filter_by(user_id=user_id).order_by(
+            IrrigationLog.start_time.desc()
+        ).limit(limit).all()
+        for log in irrigation_events:
+            trigger_label = {'manual': 'Manual', 'automatic': 'Automatic', 'scheduled': 'Scheduled'}.get(log.trigger_type, log.trigger_type or 'Unknown')
+            status_label = {
+                'completed': 'completed',
+                'in_progress': 'started',
+                'stopped_manual': 'stopped early',
+                'failed': 'failed to start',
+            }.get(log.status, log.status)
+            items.append({
+                'id': f'irr-{log.log_id}',
+                'ref_id': log.log_id,
+                'title': f'{log.zone} irrigation {status_label}',
+                'description': f'{trigger_label} trigger' + (f' · {round(log.water_used)}L used' if log.water_used else '') + (f' · {round(log.duration / 60)} min' if log.duration else ''),
+                'priority': 'low',
+                'source': 'irrigation',
+                'created_at': log.start_time,
+            })
+
+        detections = PlantHealthReading.query.filter_by(
+            user_id=user_id, is_healthy=False
+        ).order_by(PlantHealthReading.timestamp.desc()).limit(limit).all()
+        for reading in detections:
+            items.append({
+                'id': f'det-{reading.reading_id}',
+                'ref_id': reading.reading_id,
+                'title': f"Possible {reading.predicted_class.replace('_', ' ').title()} detected",
+                'description': f'{round(reading.confidence * 100)}% confidence' + (' · auto-treated' if reading.dosed else ''),
+                'priority': 'high' if reading.confidence >= 0.9 else 'medium',
+                'source': 'detection',
+                'created_at': reading.timestamp,
+            })
+
+        items.sort(key=lambda x: x['created_at'], reverse=True)
+        items = items[:limit]
+        for item in items:
+            item['created_at'] = item['created_at'].isoformat()
+
+        return jsonify(items)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@recommendation_bp.route('/api/recommendations/<int:rec_id>/apply', methods=['POST'])
+@token_required
+def apply_recommendation(rec_id):
+    """Apply a recommendation — must belong to the logged-in user.
+
+    Previously had no auth and no ownership check at all: anyone could
+    apply (or, in dismiss_recommendation below, dismiss) any recommendation
+    for any user just by guessing/iterating rec_id."""
+    try:
+        recommendation = Recommendation.query.filter_by(
+            recommendation_id=rec_id, user_id=request.user_id
+        ).first()
         if not recommendation:
             return jsonify({'error': 'Recommendation not found'}), 404
         
@@ -129,10 +225,13 @@ def apply_recommendation(rec_id):
         return jsonify({'error': str(e)}), 500
 
 @recommendation_bp.route('/api/recommendations/<int:rec_id>/dismiss', methods=['POST'])
+@token_required
 def dismiss_recommendation(rec_id):
-    """Dismiss a recommendation"""
+    """Dismiss a recommendation — must belong to the logged-in user."""
     try:
-        recommendation = Recommendation.query.get(rec_id)
+        recommendation = Recommendation.query.filter_by(
+            recommendation_id=rec_id, user_id=request.user_id
+        ).first()
         if not recommendation:
             return jsonify({'error': 'Recommendation not found'}), 404
         
@@ -253,6 +352,7 @@ def get_personalized_recommendations():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 @recommendation_bp.route('/api/debug/recommendations', methods=['GET'])
+@token_required
 def debug_recommendations():
     """Debug endpoint to check recommendation service"""
     try:
@@ -266,6 +366,7 @@ def debug_recommendations():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @recommendation_bp.route('/api/ollama-status', methods=['GET'])
+@token_required
 def get_ollama_status():
     """Check AI service status (Gemini-backed as of this change — route path
     kept as-is since the frontend already calls it)."""

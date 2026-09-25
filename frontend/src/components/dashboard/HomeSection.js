@@ -28,6 +28,7 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
   const [loading, setLoading] = useState(true);
   const [actionMessage, setActionMessage] = useState('');
   const [clearedAlerts, setClearedAlerts] = useState(new Set());
+  const [expandedAlertId, setExpandedAlertId] = useState(null);
 
   const lastRefreshRef = useRef(null);
   const lastRecommendationsCountRef = useRef(0);
@@ -70,7 +71,7 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
       setLoading(true);
 
       const [recResponse, statusResponse, historyResponse, healthResponse, sensorDataResponse, weatherResponse] = await Promise.all([
-        recommendationAPI.getRecommendations('pending'),
+        recommendationAPI.getActivityFeed(20),
         irrigationAPI.getCurrentStatus(),
         irrigationAPI.getHistory(),
         systemAPI.getHealth(),
@@ -132,31 +133,31 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
     setActionMessage('');
   };
 
-  const filterAndPrioritizeRecommendations = (allRecommendations) => {
-    if (!Array.isArray(allRecommendations)) return [];
-    const filteredRecs = allRecommendations.filter(
-      rec => !clearedAlerts.has(rec.id || rec.recommendation_id)
-    );
-    const criticalHigh = filteredRecs.filter(rec => rec.priority === 'critical' || rec.priority === 'high');
-    const medium = filteredRecs.filter(rec => rec.priority === 'medium');
-    const low = filteredRecs.filter(rec => rec.priority === 'low');
-    let result = [...criticalHigh];
-    if (result.length < 3) result = [...result, ...medium.slice(0, 3 - result.length)];
-    if (result.length < 3) result = [...result, ...low.slice(0, 3 - result.length)];
-    return result.slice(0, 3);
+  const filterAndPrioritizeRecommendations = (allItems) => {
+    if (!Array.isArray(allItems)) return [];
+    // Now a mixed feed (AI recommendations + real irrigation/detection
+    // events), not just recommendations — kept chronological (as the
+    // backend already sorts it) rather than reordering by severity, since
+    // "recent activity" implies recency first. The panel scrolls, so the
+    // cap here is generous rather than the old severity-based top-3.
+    return allItems
+      .filter(item => !clearedAlerts.has(item.id))
+      .slice(0, 15);
   };
 
   const handleDismissAll = () => {
-    const ids = recommendations.map(rec => rec.id || rec.recommendation_id);
+    const ids = displayAlerts.map(item => item.id);
     setClearedAlerts(prev => new Set([...prev, ...ids]));
   };
 
-  const handleDismissAlert = async (recId) => {
-    setClearedAlerts(prev => new Set(prev).add(recId));
-    try {
-      await recommendationAPI.dismissRecommendation(recId);
-    } catch (error) {
-      console.error('Error dismissing recommendation:', error);
+  const handleDismissAlert = async (item) => {
+    setClearedAlerts(prev => new Set(prev).add(item.id));
+    if (item.source === 'recommendation') {
+      try {
+        await recommendationAPI.dismissRecommendation(item.ref_id);
+      } catch (error) {
+        console.error('Error dismissing recommendation:', error);
+      }
     }
   };
 
@@ -309,38 +310,61 @@ const HomeSection = ({ currentUser, onSectionChange }) => {
               No active alerts — everything looks steady.
             </Typography>
           ) : (
-            <Stack>
+            <Stack sx={{ maxHeight: 360, overflowY: 'auto' }}>
               {displayAlerts.map((rec, i) => {
+                const id = rec.id;
                 const accent = rec.priority === 'critical' || rec.priority === 'high'
                   ? c.danger
                   : rec.priority === 'medium'
                   ? c.warning
                   : c.primaryGreen;
+                const isExpanded = expandedAlertId === id;
+                const isLong = (rec.description || '').length > 90;
+                const sourceLabel = { recommendation: 'AI', irrigation: 'Irrigation', detection: 'Vision' }[rec.source];
                 return (
                   <Stack
-                    key={rec.id || rec.recommendation_id}
+                    key={id}
                     direction="row"
                     spacing={1.5}
+                    onClick={() => setExpandedAlertId(isExpanded ? null : id)}
                     sx={{
                       py: 1.5,
+                      px: 1,
+                      mx: -1,
+                      borderRadius: 2,
+                      cursor: isLong ? 'pointer' : 'default',
+                      bgcolor: isExpanded ? c.background : 'transparent',
                       borderBottom: i < displayAlerts.length - 1 ? `1px solid ${c.border}` : 'none',
+                      '&:hover': isLong ? { bgcolor: c.background } : undefined,
                     }}
                   >
                     <Box sx={{ width: 4, borderRadius: 1, bgcolor: accent, alignSelf: 'stretch', minHeight: 36 }} />
-                    <Box sx={{ flex: 1 }}>
-                      <Stack direction="row" justifyContent="space-between">
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark }}>
-                          {rec.title}
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: c.textMuted }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
+                        <Stack direction="row" spacing={0.8} alignItems="center" flexWrap="wrap">
+                          <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark }}>
+                            {rec.title}
+                          </Typography>
+                          {sourceLabel && (
+                            <Typography variant="caption" sx={{ color: c.textMuted, border: `1px solid ${c.border}`, borderRadius: 4, px: 0.7, fontSize: 10, fontWeight: 700 }}>
+                              {sourceLabel}
+                            </Typography>
+                          )}
+                        </Stack>
+                        <Typography variant="caption" sx={{ color: c.textMuted, flexShrink: 0, ml: 1 }}>
                           {rec.created_at ? new Date(rec.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                         </Typography>
                       </Stack>
                       <Typography variant="body2" sx={{ color: c.textBody }}>
-                        {rec.description}
+                        {isExpanded || !isLong ? rec.description : `${rec.description.slice(0, 90)}...`}
                       </Typography>
+                      {isLong && (
+                        <Typography variant="caption" sx={{ color: c.secondaryGreen, fontWeight: 600 }}>
+                          {isExpanded ? 'Show less' : 'Click to read more'}
+                        </Typography>
+                      )}
                     </Box>
-                    <IconButton size="small" onClick={() => handleDismissAlert(rec.id || rec.recommendation_id)}>
+                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDismissAlert(rec); }}>
                       <Typography sx={{ color: c.textMuted, fontSize: 16, lineHeight: 1 }}>×</Typography>
                     </IconButton>
                   </Stack>

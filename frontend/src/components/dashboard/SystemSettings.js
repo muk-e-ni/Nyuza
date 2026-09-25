@@ -15,7 +15,16 @@ import {
   AccordionDetails,
   CircularProgress,
   useMediaQuery,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
 } from '@mui/material';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
+import SensorsRoundedIcon from '@mui/icons-material/SensorsRounded';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
 import WaterDropRoundedIcon from '@mui/icons-material/WaterDropRounded';
 import GridViewRoundedIcon from '@mui/icons-material/GridViewRounded';
@@ -70,21 +79,29 @@ const SystemSettings = ({ onNotification }) => {
   const [loading, setLoading] = useState(true);
   const [notificationMethods, setNotificationMethods] = useState({ email: false, sms: false, push: false, web: true });
   const [testing, setTesting] = useState(null);
+  const [farmSensors, setFarmSensors] = useState([]);
+  const [showAddZoneDialog, setShowAddZoneDialog] = useState(false);
+  const [newZoneForm, setNewZoneForm] = useState({ zone_name: '', crop_type: '', soil_type: '', area_sqm: '' });
+  const [creatingZone, setCreatingZone] = useState(false);
+  const [pickSensorId, setPickSensorId] = useState({}); // zone_id -> selected sensor_id in the assign dropdown
+  const [assigningSensor, setAssigningSensor] = useState(null); // zone_id currently mid-request
 
   const notify = (msg, type = 'info') => onNotification?.(msg, type);
 
   const fetchAll = useCallback(async () => {
     try {
-      const [settingsRes, zonesRes, prefsRes] = await Promise.all([
+      const [settingsRes, zonesRes, prefsRes, sensorsRes] = await Promise.all([
         systemAPI.getSettings(),
         systemAPI.getZones(),
         notificationAPI.getNotificationPreferences().catch(() => ({ data: {} })),
+        zoneAPI.getFarmSensors().catch(() => ({ data: [] })),
       ]);
       setSettings(prev => ({ ...prev, ...(settingsRes?.data || {}) }));
       const zonesData = zonesRes?.data?.zones || zonesRes?.data?.data || zonesRes?.data || [];
       setZones(Array.isArray(zonesData) ? zonesData : []);
       if (Array.isArray(zonesData) && zonesData.length > 0) setExpandedZoneId(zonesData[0].zone_id);
       if (prefsRes?.data?.preferences?.notification_methods) setNotificationMethods(prefsRes.data.preferences.notification_methods);
+      setFarmSensors(Array.isArray(sensorsRes?.data) ? sensorsRes.data : []);
     } catch (error) {
       console.error('Error fetching settings:', error);
       notify('Failed to load some settings', 'error');
@@ -162,6 +179,61 @@ const SystemSettings = ({ onNotification }) => {
     }
   };
 
+  const handleCreateZone = async () => {
+    if (!newZoneForm.zone_name.trim()) return notify('Zone name is required', 'error');
+    setCreatingZone(true);
+    try {
+      const response = await zoneAPI.createZone(newZoneForm);
+      const created = response.data?.zone;
+      if (created) {
+        setZones(prev => [...prev, created]);
+        setExpandedZoneId(created.zone_id);
+      }
+      notify(`${newZoneForm.zone_name} created — assign a sensor to it below to start getting real readings`, 'success');
+      setShowAddZoneDialog(false);
+      setNewZoneForm({ zone_name: '', crop_type: '', soil_type: '', area_sqm: '' });
+    } catch (error) {
+      notify(error.response?.data?.message || 'Failed to create zone', 'error');
+    } finally {
+      setCreatingZone(false);
+    }
+  };
+
+  const handleAssignSensor = async (zoneId) => {
+    const sensorId = pickSensorId[zoneId];
+    if (!sensorId) return;
+    setAssigningSensor(zoneId);
+    try {
+      await zoneAPI.assignSensor(zoneId, sensorId);
+      const sensor = farmSensors.find(s => s.sensor_id === sensorId);
+      setZones(prev => prev.map(z => (
+        z.zone_id === zoneId
+          ? { ...z, assigned_sensors: [...(z.assigned_sensors || []), sensor] }
+          : z
+      )));
+      setPickSensorId(prev => ({ ...prev, [zoneId]: '' }));
+      notify(`${sensor?.sensor_name || 'Sensor'} assigned`, 'success');
+    } catch (error) {
+      notify(error.response?.data?.message || 'Failed to assign sensor', 'error');
+    } finally {
+      setAssigningSensor(null);
+    }
+  };
+
+  const handleUnassignSensor = async (zoneId, sensorId) => {
+    try {
+      await zoneAPI.unassignSensor(zoneId, sensorId);
+      setZones(prev => prev.map(z => (
+        z.zone_id === zoneId
+          ? { ...z, assigned_sensors: (z.assigned_sensors || []).filter(s => s.sensor_id !== sensorId) }
+          : z
+      )));
+      notify('Sensor unassigned', 'success');
+    } catch (error) {
+      notify('Failed to unassign sensor', 'error');
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -234,6 +306,17 @@ const SystemSettings = ({ onNotification }) => {
       case 'zones': {
         return (
           <Stack spacing={2}>
+            <Stack direction="row" justifyContent="flex-end">
+              <Button
+                size="small"
+                variant="contained"
+                startIcon={<AddRoundedIcon sx={{ fontSize: 16 }} />}
+                onClick={() => setShowAddZoneDialog(true)}
+                sx={{ bgcolor: c.sidebarActive, '&:hover': { bgcolor: '#152018' } }}
+              >
+                Add Zone
+              </Button>
+            </Stack>
             {zones.length === 0 && (
               <Typography variant="body2" sx={{ color: c.textMuted }}>No zones configured yet.</Typography>
             )}
@@ -262,6 +345,53 @@ const SystemSettings = ({ onNotification }) => {
                         <TextField label="Soil Type" size="small" value={zoneDraft.soil_type || ''} onChange={(e) => setZoneDraft(p => ({ ...p, soil_type: e.target.value }))} sx={{ flex: '1 1 160px' }} />
                         <TextField label="Area (m²)" size="small" type="number" value={zoneDraft.area_sqm ?? ''} onChange={(e) => setZoneDraft(p => ({ ...p, area_sqm: e.target.value }))} sx={{ flex: '1 1 120px' }} />
                       </Box>
+
+                      <Box sx={{ borderTop: `1px solid ${c.border}`, pt: 2 }}>
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                          <SensorsRoundedIcon sx={{ fontSize: 16, color: c.textMuted }} />
+                          <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark }}>Assigned Sensors</Typography>
+                        </Stack>
+                        {(!zone.assigned_sensors || zone.assigned_sensors.length === 0) ? (
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                            <WarningAmberRoundedIcon sx={{ fontSize: 16, color: c.warning }} />
+                            <Typography variant="body2" sx={{ color: c.warning }}>
+                              No sensor assigned yet — this zone won't receive real moisture readings until one is.
+                            </Typography>
+                          </Stack>
+                        ) : (
+                          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+                            {zone.assigned_sensors.map(s => (
+                              <Chip
+                                key={s.sensor_id}
+                                label={s.sensor_name}
+                                onDelete={() => handleUnassignSensor(zone.zone_id, s.sensor_id)}
+                                size="small"
+                                sx={{ bgcolor: c.chipGreenBg, color: c.primaryGreen, fontWeight: 600 }}
+                              />
+                            ))}
+                          </Stack>
+                        )}
+                        <Stack direction="row" spacing={1}>
+                          <TextField
+                            select size="small" label="Assign a sensor" sx={{ minWidth: 200 }}
+                            value={pickSensorId[zone.zone_id] || ''}
+                            onChange={(e) => setPickSensorId(p => ({ ...p, [zone.zone_id]: Number(e.target.value) }))}
+                          >
+                            {farmSensors
+                              .filter(s => !(zone.assigned_sensors || []).some(a => a.sensor_id === s.sensor_id))
+                              .map(s => <MenuItem key={s.sensor_id} value={s.sensor_id}>{s.sensor_name}</MenuItem>)}
+                          </TextField>
+                          <Button
+                            size="small" variant="outlined"
+                            disabled={!pickSensorId[zone.zone_id] || assigningSensor === zone.zone_id}
+                            onClick={() => handleAssignSensor(zone.zone_id)}
+                            sx={{ borderColor: c.border, color: c.textDark }}
+                          >
+                            Assign
+                          </Button>
+                        </Stack>
+                      </Box>
+
                       <Stack direction="row" spacing={1} justifyContent="flex-end">
                         <Button size="small" onClick={() => setExpandedZoneId(null)} sx={{ color: c.textBody }}>Cancel</Button>
                         <Button size="small" variant="contained" disabled={savingZone} onClick={handleSaveZone} sx={{ bgcolor: c.sidebarActive, '&:hover': { bgcolor: '#152018' } }}>
@@ -272,9 +402,19 @@ const SystemSettings = ({ onNotification }) => {
                   ) : (
                     <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
                       <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark }}>
-                          {zone.zone_name} {zone.area_sqm ? `· ${zone.area_sqm} m²` : ''}
-                        </Typography>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Typography variant="body2" sx={{ fontWeight: 700, color: c.textDark }}>
+                            {zone.zone_name} {zone.area_sqm ? `· ${zone.area_sqm} m²` : ''}
+                          </Typography>
+                          {(!zone.assigned_sensors || zone.assigned_sensors.length === 0) && (
+                            <Chip
+                              icon={<WarningAmberRoundedIcon sx={{ fontSize: 13 }} />}
+                              label="No sensor"
+                              size="small"
+                              sx={{ bgcolor: c.warningBg, color: c.warning, fontWeight: 700, height: 20, fontSize: 11 }}
+                            />
+                          )}
+                        </Stack>
                         <Typography variant="body2" sx={{ color: c.textMuted }}>
                           {zone.crop_type || 'No crop set'} · {zone.soil_type || 'No soil set'}
                         </Typography>
@@ -414,6 +554,37 @@ const SystemSettings = ({ onNotification }) => {
     </Stack>
   );
 
+  const addZoneDialog = (
+    <Dialog open={showAddZoneDialog} onClose={() => setShowAddZoneDialog(false)} fullWidth maxWidth="sm">
+      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: 700, color: c.textDark }}>
+        Add Zone
+        <IconButton onClick={() => setShowAddZoneDialog(false)} size="small"><CloseRoundedIcon /></IconButton>
+      </DialogTitle>
+      <DialogContent>
+        <Stack spacing={2.5} sx={{ mt: 1 }}>
+          <TextField label="Zone Name" value={newZoneForm.zone_name} onChange={(e) => setNewZoneForm(p => ({ ...p, zone_name: e.target.value }))} placeholder="e.g. North Orchard" fullWidth />
+          <TextField label="Crop / Plant Type" value={newZoneForm.crop_type} onChange={(e) => setNewZoneForm(p => ({ ...p, crop_type: e.target.value }))} fullWidth />
+          <TextField label="Soil Type" value={newZoneForm.soil_type} onChange={(e) => setNewZoneForm(p => ({ ...p, soil_type: e.target.value }))} fullWidth />
+          <TextField label="Area (m²)" type="number" value={newZoneForm.area_sqm} onChange={(e) => setNewZoneForm(p => ({ ...p, area_sqm: e.target.value }))} fullWidth />
+          <Typography variant="caption" sx={{ color: c.textMuted }}>
+            You can assign a sensor to this zone right after creating it, from the zone's edit view.
+          </Typography>
+        </Stack>
+      </DialogContent>
+      <DialogActions sx={{ p: 3, pt: 1 }}>
+        <Button onClick={() => setShowAddZoneDialog(false)} sx={{ color: c.textBody }}>Cancel</Button>
+        <Button
+          variant="contained"
+          disabled={creatingZone || !newZoneForm.zone_name.trim()}
+          onClick={handleCreateZone}
+          sx={{ bgcolor: c.sidebarActive, '&:hover': { bgcolor: '#152018' } }}
+        >
+          {creatingZone ? 'Creating...' : 'Create Zone'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+
   if (isMobile) {
     return (
       <Box>
@@ -434,6 +605,7 @@ const SystemSettings = ({ onNotification }) => {
           </Accordion>
         ))}
         {footer}
+        {addZoneDialog}
       </Box>
     );
   }
@@ -471,6 +643,7 @@ const SystemSettings = ({ onNotification }) => {
         {categoryContent(activeCategory)}
         {footer}
       </Box>
+      {addZoneDialog}
     </Box>
   );
 };

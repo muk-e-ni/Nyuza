@@ -5,26 +5,35 @@ from services.genai_service import genai_service
 from services.weather_service import weather_service
 
 class AIRecommendationEngine:
+    # How long a cached AI result is considered fresh before it's
+    # regenerated even without an explicit force_refresh or irrigation
+    # event. Event-based invalidation (analyze_irrigation_event) alone
+    # isn't enough — conditions can drift (moisture dropping, weather
+    # changing) with no irrigation event ever firing to invalidate the
+    # cache, which is exactly what made recommendations look frozen.
+    CACHE_TTL_SECONDS = 2 * 3600  # 2 hours
+
     def __init__(self):
         self.ollama_service = genai_service  # kept the attribute name for now — many call sites below still say self.ollama_service, but it's Gemini-backed as of this change
-        # In-memory cache for AI-backed results: serve the last generated
-        # result indefinitely per cache key, until the caller explicitly asks
-        # for force_refresh=True. This is what "click refresh if you want a
-        # new one" maps to — no TTL, no background regeneration, just: don't
-        # call the AI again unless asked. Resets on server restart, which is
-        # fine for this use case.
+        # In-memory cache for AI-backed results: (result, generated_at) per
+        # cache key. Resets on server restart, which is fine for this use case.
         self._result_cache = {}
 
     def _cached_or_generate(self, cache_key, generator_fn, force_refresh=False):
-        if not force_refresh and cache_key in self._result_cache:
-            cached = self._result_cache[cache_key]
+        cached_entry = self._result_cache.get(cache_key)
+        is_stale = (
+            cached_entry is None
+            or (datetime.now() - cached_entry[1]).total_seconds() > self.CACHE_TTL_SECONDS
+        )
+        if not force_refresh and cached_entry is not None and not is_stale:
+            cached = cached_entry[0]
             result = dict(cached) if isinstance(cached, dict) else cached
             if isinstance(result, dict):
                 result['cached'] = True
             return result
 
         result = generator_fn()
-        self._result_cache[cache_key] = result
+        self._result_cache[cache_key] = (result, datetime.now())
         if isinstance(result, dict):
             result = dict(result)
             result['cached'] = False
